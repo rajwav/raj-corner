@@ -1,0 +1,5 @@
+---
+import Base from '../../layouts/Base.astro'; import EntryList from '../../components/EntryList.astro'; import { entries } from '../../lib/universe';
+const memories = (await entries()).filter(x=>x.data.type==='memory');
+---
+<Base title="Memory drawer · Raj's Corner"><section class="page-intro"><p class="label">The memory drawer</p><h1>Small things are<br />still worth keeping.</h1><p class="lede">Fragments that would disappear otherwise: a song, a turn in the road, an absurd afternoon, a particular sunrise.</p></section><EntryList entries={memories} heading="Open a drawer" /></Base>

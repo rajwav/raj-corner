@@ -1,0 +1,5 @@
+---
+import { getEntry } from 'astro:content'; import Base from '../../layouts/Base.astro';
+const list = await getEntry('lifeLists', 'life-list');
+---
+<Base title="Life list · Raj's Corner"><section class="page-intro"><p class="label">A list that should take years</p><h1>The life list.</h1><p class="lede">Some things have happened. Some are next. Some can wait quietly in the distance.</p></section><section class="life-list">{[['Done',list!.data.done,'✓'],['Next',list!.data.next,'→'],['Someday',list!.data.someday,'○']].map(([title,items,mark])=><article><p class="label">{title}</p><ul>{(items as string[]).map(item=><li><b>{mark}</b>{item}</li>)}</ul></article>)}</section></Base>

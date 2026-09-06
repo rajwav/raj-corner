@@ -1,0 +1,5 @@
+---
+import Base from '../../layouts/Base.astro'; import { entries, worlds, worldForType } from '../../lib/universe';
+const all = await entries();
+---
+<Base title="Explore · Raj's Corner"><section class="page-intro"><p class="label">The index</p><h1>Choose a door.</h1><p class="lede">These are rooms with loose connections between them. The archive, however, is the corridor that joins them.</p></section><section class="world-index">{worlds.map(([slug,title,description,accent]) => { const found=all.filter(e=>worldForType(e.data.type)===slug); const href=slug==='archive'?'/archive/':slug==='me'?'/currently/':`/world/${slug}/`; return <article id={slug} class={`world ${accent}`}><p class="label">{String(found.length).padStart(2,'0')} things found</p><h2>{title}</h2><p>{description}</p><div><a href={href}>Enter this world <span>→</span></a>{found.slice(0,2).map(e => <a href={`/entry/${e.id}/`}>{e.data.title} <span>↗</span></a>)}</div></article>})}</section></Base>

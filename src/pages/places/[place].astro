@@ -1,0 +1,7 @@
+---
+import Base from '../../layouts/Base.astro'; import EntryList from '../../components/EntryList.astro'; import { entries, placeSlug } from '../../lib/universe';
+const all = await entries();
+export async function getStaticPaths() { const names = [...new Set((await entries()).map(e=>e.data.location).filter((x): x is string => Boolean(x)))]; return names.map(place => ({ params:{ place:placeSlug(place) }, props:{place} })); }
+const { place } = Astro.props; const found = all.filter(entry => entry.data.location === place);
+---
+<Base title={`${place} · Places · Raj's Corner`}><section class="page-intro"><p class="label">A place in the archive</p><h1>{place}</h1><p class="lede">Everything here that touches this place: trips, photographs, fragments, and whatever it becomes attached to later.</p></section><EntryList entries={found} heading={`Found around ${place}`} /><section class="world-footer"><p class="label">Elsewhere</p><a href="/places/">Back to all places →</a><a href="/archive/">Open the archive →</a></section></Base>

@@ -1,0 +1,6 @@
+---
+import '../styles/global.css';
+import '../styles/archive.css';
+const { title = "Raj's Corner" } = Astro.props;
+---
+<!doctype html><html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width" /><meta name="description" content="Raj's personal universe: places, memories, curiosities and field notes." /><title>{title}</title><link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" /><link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" /></head><body><header><a class="wordmark" href="/">RAJ <i>✦</i></a><nav><a href="/explore/">Explore</a><a href="/timeline/">Timeline</a><a href="/places/">Places</a><a href="/random/">Surprise me</a></nav></header><main><slot /></main><footer><span>Made slowly by Raj.</span><span>A living archive, not a finished product.</span></footer></body></html>

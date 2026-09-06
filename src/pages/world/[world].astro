@@ -1,0 +1,6 @@
+---
+import Base from '../../layouts/Base.astro'; import EntryList from '../../components/EntryList.astro'; import { entries, worlds, worldForType } from '../../lib/universe';
+export async function getStaticPaths() { return worlds.filter(([slug]) => !['archive','me'].includes(slug)).map(([world]) => ({ params:{world} })); }
+const { world } = Astro.params; const definition = worlds.find(([slug])=>slug===world)!; const found = (await entries()).filter(entry => worldForType(entry.data.type) === world);
+---
+<Base title={`${definition[1]} · Raj's Corner`}><section class={`page-intro world-intro ${definition[3]}`}><p class="label">A world in Raj’s corner</p><h1>{definition[1]}</h1><p class="lede">{definition[2]}</p><p class="small-count">{found.length} {found.length === 1 ? 'thing' : 'things'} here so far. This room will change.</p></section><EntryList entries={found} heading="Things to discover" /><section class="world-footer"><p class="label">Keep wandering</p><a href="/archive/">Open the whole archive →</a><a href="/random/">Show me something unexpected →</a></section></Base>

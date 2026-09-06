@@ -1,0 +1,5 @@
+---
+import Base from '../../layouts/Base.astro'; import { entries } from '../../lib/universe';
+const all = await entries(); const places = [...new Set(all.map(x=>x.data.location).filter(Boolean))];
+---
+<Base title="Places · Raj's Corner"><section class="page-intro"><p class="label">The places index</p><h1>Every place holds more than a pin.</h1><p class="lede">Visits, photographs, future plans, meals, people, routes, and the strange feeling of remembering a specific light.</p></section><section class="place-map"><div class="map-paper"><span class="pin p1">Puri</span><span class="pin p2">Bengaluru</span><span class="pin p3">Kerala?</span><span class="map-note">A hand-drawn map<br />of where the stories point.</span></div><aside><p class="label">Places in the archive</p>{places.map(place => <div><h3>{place}</h3><p>{all.filter(e=>e.data.location===place).map(e=><a href={`/entry/${e.id}/`}>{e.data.title}</a>)}</p></div>)}<div><h3>Future pins</h3><p>Japan · Iceland · a long road with no schedule</p></div></aside></section></Base>

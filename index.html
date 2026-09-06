@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Raj's small corner of the internet." />
+    <title>Raj's Corner</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="wordmark" href="#top">RAJ <span>✦</span></a>
+      <nav aria-label="Main navigation">
+        <a href="#collections">Things I like</a>
+        <a href="#now">Now</a>
+        <a href="#notes">Notes</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <p class="eyebrow">A personal website, not a portfolio</p>
+        <h1>A small corner<br />of the internet.</h1>
+        <p class="intro">Hi, I’m Raj. This is where I keep places, obsessions, photographs, half-formed thoughts, and the occasional experiment.</p>
+        <a class="button" href="#collections">Come look around <span aria-hidden="true">↓</span></a>
+        <p class="location">Currently somewhere in India · <span id="local-date"></span></p>
+      </section>
+
+      <section id="collections" class="collections" aria-labelledby="collections-title">
+        <div class="section-heading">
+          <p class="eyebrow">The collections</p>
+          <h2 id="collections-title">The stuff that makes life feel bigger.</h2>
+        </div>
+        <div class="card-grid">
+          <a class="story-card travel" href="#notes"><span class="card-number">01</span><h3>Travel</h3><p>Roads taken, places remembered, and future routes.</p><span class="card-arrow">↗</span></a>
+          <a class="story-card cars" href="#notes"><span class="card-number">02</span><h3>Garage</h3><p>Cars I love, cars I’ve driven, and dream-spec nonsense.</p><span class="card-arrow">↗</span></a>
+          <a class="story-card music" href="#notes"><span class="card-number">03</span><h3>Music</h3><p>Albums, songs, and soundtracks for particular days.</p><span class="card-arrow">↗</span></a>
+          <a class="story-card space" href="#notes"><span class="card-number">04</span><h3>Space</h3><p>Cosmic rabbit holes and things that make me look up.</p><span class="card-arrow">↗</span></a>
+          <a class="story-card photos" href="#notes"><span class="card-number">05</span><h3>Photos</h3><p>Little proof that I was there.</p><span class="card-arrow">↗</span></a>
+          <a class="story-card experiments" href="#notes"><span class="card-number">06</span><h3>Experiments</h3><p>Odd ideas, small builds, and unfinished things.</p><span class="card-arrow">↗</span></a>
+        </div>
+      </section>
+
+      <section id="now" class="now" aria-labelledby="now-title">
+        <div><p class="eyebrow">Right now</p><h2 id="now-title">A few live bookmarks.</h2></div>
+        <ul>
+          <li><span>Listening</span><strong>Add the album that’s on repeat</strong></li>
+          <li><span>Planning</span><strong>One trip worth daydreaming about</strong></li>
+          <li><span>Learning</span><strong>The topic currently taking over my brain</strong></li>
+        </ul>
+      </section>
+
+      <section id="notes" class="notes" aria-labelledby="notes-title">
+        <div class="section-heading"><p class="eyebrow">Field notes</p><h2 id="notes-title">Start with a few true things.</h2></div>
+        <div class="note-list">
+          <article><p>FIRST TRIP</p><h3>Write about the place you remember most vividly.</h3><span>Travel · whenever you’re ready</span></article>
+          <article><p>FIRST OBSESSION</p><h3>The car, song, game, or strange fact you can’t stop returning to.</h3><span>Personal · whenever you’re ready</span></article>
+          <article><p>FIRST EXPERIMENT</p><h3>Make something tiny, imperfect, and interesting.</h3><span>Experiments · whenever you’re ready</span></article>
+        </div>
+      </section>
+    </main>
+
+    <footer><span>Made slowly by Raj.</span><span>© <span id="year"></span></span></footer>
+    <script src="script.js"></script>
+  </body>
+</html>

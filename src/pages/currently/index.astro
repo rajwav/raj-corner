@@ -1,0 +1,5 @@
+---
+import { getEntry } from 'astro:content'; import Base from '../../layouts/Base.astro';
+const snapshot = await getEntry('currently', 'now'); const items = Object.entries(snapshot!.data).filter(([key])=>key!=='updated' && key!=='id');
+---
+<Base title="Currently · Raj's Corner"><section class="page-intro"><p class="label">A living snapshot</p><h1>Currently.</h1><p class="lede">Not an archive. Just the things that have my attention right now, allowed to change as often as life does.</p><p class="small-count">Last changed {snapshot!.data.updated.toLocaleDateString('en',{month:'long',day:'numeric',year:'numeric'})}.</p></section><section class="currently-grid">{items.filter(([,value])=>value).map(([label,value])=><article><p class="label">{label}</p><h2>{value}</h2></article>)}</section><section class="world-footer"><p class="label">Also here</p><a href="/life-list/">The life list →</a><a href="/archive/">Permanent things in the archive →</a></section></Base>

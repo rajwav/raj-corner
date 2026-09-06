@@ -1,0 +1,5 @@
+---
+import { entries } from '../../lib/universe';
+const choices = (await entries()).map(entry => `/entry/${entry.id}/`);
+---
+<!doctype html><title>Finding something…</title><p>Finding something unexpected…</p><script is:inline define:vars={{ choices }}>location.replace(choices[Math.floor(Math.random() * choices.length)]);</script>

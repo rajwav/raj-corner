@@ -1,0 +1,5 @@
+---
+import Base from '../../layouts/Base.astro'; import { entries, niceDate } from '../../lib/universe';
+const all = await entries(); const groups = Object.groupBy(all, x => x.data.date?.getFullYear() ?? 'Someday');
+---
+<Base title="Timeline · Raj's Corner"><section class="page-intro"><p class="label">The chronological layer</p><h1>Time leaves clues.</h1><p class="lede">A slowly growing record of days, detours, milestones, and things that changed the shape of a year.</p></section><section class="timeline">{Object.entries(groups).sort(([a],[b])=>b.localeCompare(a)).map(([year,items]) => <div class="year"><h2>{year}</h2><div>{items?.map(e => <a href={`/entry/${e.id}/`}><time>{niceDate(e.data.date)}</time><span>{e.data.type}</span><strong>{e.data.title}</strong><i>→</i></a>)}</div></div>)}</section></Base>
