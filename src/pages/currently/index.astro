@@ -1,5 +1,65 @@
 ---
-import { getEntry } from 'astro:content'; import Base from '../../layouts/Base.astro';
-const snapshot = await getEntry('currently', 'now'); const items = Object.entries(snapshot!.data).filter(([key])=>key!=='updated' && key!=='id');
+import { getEntry } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+import { entries, placeSlug } from '../../lib/universe';
+
+const snapshot = await getEntry('currently', 'now');
+const items = Object.entries(snapshot!.data)
+  .filter(([key, value]) => key !== 'updated' && key !== 'id' && value);
+
+const sizeMap: Record<string, string> = {
+  thinking: 'large',
+  obsessed: 'large',
+  building: 'large',
+  reading: 'medium',
+  learning: 'medium',
+  planning: 'medium',
+  listening: 'small',
+  watching: 'small',
+  wanting: 'small'
+};
+
+const updatedDate = snapshot!.data.updated.toLocaleDateString('en', { month: 'long', day: 'numeric', year: 'numeric' });
+
+// Build a map of potential connections
+const all = await entries();
+const places = new Set(all.map(x=>x.data.location).filter(Boolean));
+
+function linkify(text: any) {
+  const str = String(text);
+  // Match entry titles
+  const matchingEntry = all.find(e => e.data.title.toLowerCase() === str.toLowerCase());
+  if (matchingEntry) return `<a href="/entry/${matchingEntry.id}/" class="currently-link">${str}</a>`;
+  
+  // Match places
+  const matchingPlace = [...places].find(p => String(p).toLowerCase() === str.toLowerCase());
+  if (matchingPlace) return `<a href="/places/${placeSlug(String(matchingPlace))}/" class="currently-link">${str}</a>`;
+  
+  return str;
+}
 ---
-<Base title="Currently · Raj's Corner"><section class="page-intro"><p class="label">A living snapshot</p><h1>Currently.</h1><p class="lede">Not an archive. Just the things that have my attention right now, allowed to change as often as life does.</p><p class="small-count">Last changed {snapshot!.data.updated.toLocaleDateString('en',{month:'long',day:'numeric',year:'numeric'})}.</p></section><section class="currently-grid">{items.filter(([,value])=>value).map(([label,value])=><article><p class="label">{label}</p><h2>{value}</h2></article>)}</section><section class="world-footer"><p class="label">Also here</p><a href="/life-list/">The life list →</a><a href="/archive/">Permanent things in the archive →</a></section></Base>
+
+<Base title="Currently · Raj's Corner">
+  <article class="currently-container">
+    <header class="currently-header">
+      <span class="currently-label">Now</span>
+      <h1 class="currently-title">Things occupying my head lately.</h1>
+      <div class="currently-meta">
+        <span class="currently-status">Temporary snapshot</span>
+        <span class="currently-date">Recorded: {updatedDate}</span>
+      </div>
+    </header>
+
+    <section class="currently-scatter">
+      {items.map(([label, value]) => {
+        const sizeClass = sizeMap[label] || 'medium';
+        return (
+          <div class={`currently-note note-${sizeClass} note-${label}`}>
+            <span class="note-label">{label}</span>
+            <div class="note-content" set:html={linkify(value)} />
+          </div>
+        );
+      })}
+    </section>
+  </article>
+</Base>

@@ -1,9 +1,71 @@
 ---
-import Base from '../layouts/Base.astro'; import EntryList from '../components/EntryList.astro'; import { entries, worlds } from '../lib/universe';
-const all = await entries(); const recent = all.slice(0,4);
+import Base from '../layouts/Base.astro';
+import EntryList from '../components/EntryList.astro';
+import { entries, worlds } from '../lib/universe';
+const all = await entries();
+const recent = all.slice(0, 4);
+
+// Filter primary worlds for the museum wings
+const primaryWorlds = worlds.filter(([slug]) => !['archive', 'me'].includes(slug));
 ---
-<Base><section class="hero universe-hero"><p class="label">Raj’s corner of the internet</p><h1>This is not my website.<br /><em>It’s my world.</em></h1><p class="lede">A growing archive of places I’ve been, things I want, songs that stayed, small memories, large questions, and whatever else earns a place here.</p><div class="hero-actions"><a class="button" href="/explore/">Come inside <span>↓</span></a><a class="text-link" href="/random/">or find something unexpected →</a></div><p class="quiet">Start anywhere. Follow the threads.</p></section>
-<section class="map-strip"><div><p class="label">A map of the archive</p><h2>There are many doors.<br />None is the right one.</h2></div><div class="constellation">{worlds.map(([slug,title,,accent], i) => <a class={`dot ${accent}`} style={`--x:${[15,63,82,38,71,25][i]}%;--y:${[26,19,56,69,82,90][i]}%`} href={slug === 'archive' ? '/archive/' : slug === 'me' ? '/currently/' : `/world/${slug}/`}><span>{title}</span></a>)}<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d="M15 26 L63 19 L82 56 L38 69 L71 82 L25 90 L15 26" /></svg></div></section>
-<section class="now-section"><div><p class="label">Currently</p><h2>A living snapshot.</h2><p>These change whenever life does.</p></div><ul><li><span>Listening</span><b>Add the album currently on repeat</b></li><li><span>Planning</span><b>The next road worth taking</b></li><li><span>Thinking about</span><b>One question that will not leave me alone</b></li></ul></section>
-<EntryList entries={recent} heading="Recently added to the archive" />
+
+<Base>
+  <section class="hero universe-hero">
+    <p class="label">Coordinates: Earth</p>
+    <h1>
+      This is not my website.<br /><em>It’s my world.</em>
+    </h1>
+    <p class="lede">
+      A growing archive of places I’ve been, things I want, songs that stayed,
+      small memories, large questions, and whatever else earns a place here.
+    </p>
+    <div class="hero-actions">
+      <p class="quiet">Start anywhere. Follow the threads.</p>
+    </div>
+  </section>
+
+  <section class="museum-wings">
+    <div class="wings-intro">
+      <p class="label">The Wings</p>
+      <h2>
+        There are many doors.<br />None is the right one.
+      </h2>
+    </div>
+    
+    <div class="wings-grid">
+      {
+        primaryWorlds.map(([slug, title, desc, accent]) => (
+          <a href={`/world/${slug}/`} class={`wing-door ${accent}`}>
+            <div class="wing-content">
+              <h3>{title}</h3>
+              <p>{desc}</p>
+            </div>
+            <div class="wing-meta">Enter wing →</div>
+          </a>
+        ))
+      }
+    </div>
+  </section>
+
+  <section class="cross-dimensions">
+    <p class="label">Other Dimensions</p>
+    <div class="dimension-list">
+      <a href="/timeline/" class="dimension">
+        <h4>The Timeline</h4>
+        <p>A chronological record of days.</p>
+      </a>
+      <a href="/places/" class="dimension">
+        <h4>The Atlas</h4>
+        <p>A map of where the stories point.</p>
+      </a>
+      <a href="/currently/" class="dimension">
+        <h4>Currently</h4>
+        <p>A living snapshot of right now.</p>
+      </a>
+    </div>
+  </section>
+
+  <section class="recent-artifacts">
+    <EntryList entries={recent} heading="Recently cataloged artifacts" />
+  </section>
 </Base>

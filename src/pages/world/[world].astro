@@ -1,6 +1,362 @@
 ---
-import Base from '../../layouts/Base.astro'; import EntryList from '../../components/EntryList.astro'; import { entries, worlds, worldForType } from '../../lib/universe';
-export async function getStaticPaths() { return worlds.filter(([slug]) => !['archive','me'].includes(slug)).map(([world]) => ({ params:{world} })); }
-const { world } = Astro.params; const definition = worlds.find(([slug])=>slug===world)!; const found = (await entries()).filter(entry => worldForType(entry.data.type) === world);
+import Base from '../../layouts/Base.astro';
+import EntryList from '../../components/EntryList.astro';
+import { entries, worlds, worldForType, niceDate, placeSlug } from '../../lib/universe';
+
+export async function getStaticPaths() {
+  return worlds.filter(([slug]) => !['archive','me'].includes(slug)).map(([world]) => ({ params:{world} }));
+}
+
+const { world } = Astro.params;
+const definition = worlds.find(([slug])=>slug===world)!;
+const found = (await entries()).filter(entry => worldForType(entry.data.type) === world);
+
+// Sort for Travel and Life
+const sortedEntries = found.slice().sort((a, b) => {
+  if (!a.data.date) return 1;
+  if (!b.data.date) return -1;
+  return b.data.date.getTime() - a.data.date.getTime();
+});
+
+// Group by year for Life
+const lifeEras = Object.groupBy(sortedEntries, x => x.data.date?.getFullYear() ?? 'Timeless');
+const lifeYears = Object.entries(lifeEras).sort(([a], [b]) => b.localeCompare(a));
+
+// Groups for Making
+const mkCurrent = found.filter(e => ['now', 'building', 'learning'].includes((e.data as any).status));
+const mkExperiments = found.filter(e => e.data.type === 'experiment' && !mkCurrent.includes(e));
+const mkIdeas = found.filter(e => (e.data.type === 'idea' || e.data.type === 'note' || e.data.type === 'thought' || e.data.type === 'goal') && !mkCurrent.includes(e));
+const mkOther = found.filter(e => !mkCurrent.includes(e) && !mkExperiments.includes(e) && !mkIdeas.includes(e));
 ---
-<Base title={`${definition[1]} · Raj's Corner`}><section class={`page-intro world-intro ${definition[3]}`}><p class="label">A world in Raj’s corner</p><h1>{definition[1]}</h1><p class="lede">{definition[2]}</p><p class="small-count">{found.length} {found.length === 1 ? 'thing' : 'things'} here so far. This room will change.</p></section><EntryList entries={found} heading="Things to discover" /><section class="world-footer"><p class="label">Keep wandering</p><a href="/archive/">Open the whole archive →</a><a href="/random/">Show me something unexpected →</a></section></Base>
+<Base title={`${definition[1]} · Raj's Corner`}>
+  {world === 'travel' ? (
+    <article class="travel-world-container">
+      <header class="travel-header">
+        <span class="travel-label">A wing in the archive</span>
+        <h1 class="travel-title">{definition[1]}</h1>
+        <p class="travel-lede">{definition[2]}</p>
+        <p class="travel-count">{found.length} {found.length === 1 ? 'journey' : 'journeys'} recorded.</p>
+      </header>
+      
+      <section class="travel-journeys">
+        {sortedEntries.map((entry, idx) => (
+          <article class={`travel-journey ${entry.data.cover ? 'has-cover' : ''} ${idx === 0 ? 'featured' : ''}`}>
+            {entry.data.cover && (
+              <a href={`/entry/${entry.id}/`} class="journey-cover-link">
+                <figure class="journey-cover">
+                  <img src={entry.data.cover} alt={entry.data.title} loading="lazy" />
+                </figure>
+              </a>
+            )}
+            <div class="journey-content">
+              <div class="journey-meta">
+                {entry.data.date && <span class="j-date">{niceDate(entry.data.date)}</span>}
+                {entry.data.location && (
+                  <a href={`/places/${placeSlug(entry.data.location)}/`} class="j-location">
+                    {entry.data.location}
+                  </a>
+                )}
+                <span class="j-type">{entry.data.type}</span>
+              </div>
+              <a href={`/entry/${entry.id}/`} class="journey-title-link">
+                <h2 class="journey-title">{entry.data.title}</h2>
+              </a>
+              {entry.data.description && <p class="journey-desc">{entry.data.description}</p>}
+              <a href={`/entry/${entry.id}/`} class="journey-arrow">Read field notes →</a>
+            </div>
+          </article>
+        ))}
+      </section>
+      
+      <footer class="travel-footer">
+        <p class="travel-label">Keep wandering</p>
+        <div class="travel-links">
+          <a href="/places/">Open the Atlas →</a>
+          <a href="/timeline/">View Timeline →</a>
+          <a href="/archive/">Search the Archive →</a>
+        </div>
+      </footer>
+    </article>
+  ) : world === 'life' ? (
+    <article class="life-world-container">
+      <header class="life-header">
+        <span class="life-label">A life in fragments</span>
+        <h1 class="life-title">Life</h1>
+        <p class="life-lede">Some things are worth remembering. Some are worth writing down. This is where they stay.</p>
+        <p class="life-count">{found.length} {found.length === 1 ? 'fragment' : 'fragments'} kept so far.</p>
+      </header>
+
+      <section class="life-eras">
+        {lifeYears.map(([year, items]) => (
+          <div class="life-era-block">
+            <h2 class="life-era-marker">{year}</h2>
+            <div class="life-fragments">
+              {items?.map(entry => {
+                const isPhoto = entry.data.type === 'photo';
+                const isMilestone = entry.data.type === 'milestone';
+                const isPerson = entry.data.type === 'person';
+                const isMemory = entry.data.type === 'memory';
+                const isThought = entry.data.type === 'note' || entry.data.type === 'idea';
+                
+                let fragType = 'ordinary';
+                if (isPhoto) fragType = 'photo';
+                else if (isMilestone) fragType = 'milestone';
+                else if (isPerson) fragType = 'person';
+                else if (isMemory) fragType = 'memory';
+                else if (isThought) fragType = 'thought';
+
+                return (
+                  <article class={`life-fragment frag-${fragType}`}>
+                    {isPhoto && entry.data.cover ? (
+                      <div class="frag-photo-wrapper">
+                        <a href={`/entry/${entry.id}/`} class="frag-photo-link">
+                          <img src={entry.data.cover} alt={entry.data.title} loading="lazy" />
+                        </a>
+                        <div class="frag-photo-caption">
+                          <span>{entry.data.title}</span>
+                          {entry.data.date && <span>{niceDate(entry.data.date)}</span>}
+                        </div>
+                      </div>
+                    ) : isMilestone ? (
+                      <a href={`/entry/${entry.id}/`} class="frag-milestone-link">
+                        <span class="m-date">{entry.data.date ? niceDate(entry.data.date) : ''}</span>
+                        <h3 class="m-title">{entry.data.title}</h3>
+                        {entry.data.description && <p class="m-desc">{entry.data.description}</p>}
+                      </a>
+                    ) : (
+                      <div class="frag-content-wrapper">
+                        <div class="frag-meta">
+                          {entry.data.date && <span class="f-date">{niceDate(entry.data.date)}</span>}
+                          <span class="f-type">{entry.data.type}</span>
+                          {entry.data.location && (
+                            <a href={`/places/${placeSlug(entry.data.location)}/`} class="f-location">
+                              {entry.data.location}
+                            </a>
+                          )}
+                        </div>
+                        <a href={`/entry/${entry.id}/`} class="frag-title-link">
+                          <h3 class="f-title">{entry.data.title}</h3>
+                        </a>
+                        {entry.data.description && <p class="f-desc">{entry.data.description}</p>}
+                        
+                        {isMemory && entry.data.cover && (
+                          <a href={`/entry/${entry.id}/`} class="frag-memory-photo">
+                            <img src={entry.data.cover} alt={entry.data.title} loading="lazy" />
+                          </a>
+                        )}
+                        
+                        <a href={`/entry/${entry.id}/`} class="frag-read-more">
+                          {isPerson ? 'Read about them →' : 'Read fragment →'}
+                        </a>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </section>
+
+      <footer class="life-footer">
+        <p class="life-footer-label">Keep looking around</p>
+        <div class="life-links">
+          <a href="/timeline/">Timeline</a>
+          <a href="/places/">Atlas</a>
+          <a href="/currently/">Currently</a>
+          <a href="/world/travel/">Travel</a>
+          <a href="/archive/">Archive</a>
+          <a href="/random/">Surprise Me</a>
+        </div>
+      </footer>
+    </article>
+  ) : world === 'interests' ? (
+    <article class="interests-world-container">
+      <header class="interests-header">
+        <span class="interests-label">A cabinet of curiosities</span>
+        <h1 class="interests-title">Interests</h1>
+        <p class="interests-lede">Things I keep coming back to. The fascinations that occupy a curious mind.</p>
+        <p class="interests-count">{found.length} {found.length === 1 ? 'thread' : 'threads'} to follow.</p>
+      </header>
+
+      <section class="interests-gallery">
+        {found.map(entry => {
+          const t = entry.data.type;
+          let typeClass = 'int-default';
+          if (t === 'music') typeClass = 'int-music';
+          else if (t === 'car') typeClass = 'int-car';
+          else if (t === 'space') typeClass = 'int-space';
+          else if (t === 'chess') typeClass = 'int-chess';
+          else if (t === 'book' || t === 'movie' || t === 'anime') typeClass = 'int-culture';
+          
+          return (
+            <a href={`/entry/${entry.id}/`} class={`interest-item ${typeClass}`}>
+              {entry.data.cover && typeClass !== 'int-music' && (
+                <figure class="interest-cover">
+                  <img src={entry.data.cover} alt={entry.data.title} loading="lazy" />
+                </figure>
+              )}
+              
+              <div class="interest-content">
+                <div class="interest-meta">
+                  <span class="i-type">{entry.data.type}</span>
+                  {entry.data.date && <span class="i-date">{niceDate(entry.data.date)}</span>}
+                </div>
+                <h2 class="interest-title">{entry.data.title}</h2>
+                {entry.data.description && <p class="interest-desc">{entry.data.description}</p>}
+                
+                {typeClass === 'int-music' && entry.data.cover && (
+                  <div class="record-sleeve">
+                    <img src={entry.data.cover} alt={entry.data.title} loading="lazy" />
+                  </div>
+                )}
+                
+                <span class="interest-arrow">Follow thread →</span>
+              </div>
+            </a>
+          );
+        })}
+      </section>
+
+      <footer class="interests-footer">
+        <p class="interests-footer-label">Curiosity rarely stays in one room.</p>
+        <div class="interests-links">
+          <a href="/world/life/">Life</a>
+          <a href="/world/travel/">Travel</a>
+          <a href="/world/making/">Making</a>
+          <a href="/currently/">Currently</a>
+          <a href="/archive/">Archive</a>
+          <a href="/random/">Surprise Me</a>
+        </div>
+      </footer>
+    </article>
+  ) : world === 'making' ? (
+    <article class="making-world-container">
+      <header class="making-header">
+        <span class="making-label">A workshop in progress</span>
+        <h1 class="making-title">Making</h1>
+        <p class="making-lede">Things I’m building, breaking, learning, and trying to make real.</p>
+        <p class="making-count">{found.length} {found.length === 1 ? 'thing' : 'things'} in the workshop.</p>
+      </header>
+      
+      <div class="making-workbench">
+        {mkCurrent.length > 0 && (
+          <section class="making-group making-current">
+            <h2 class="mg-label">On the workbench</h2>
+            <div class="mg-list-large">
+              {mkCurrent.map(entry => (
+                <article class="mk-item mk-large">
+                  <div class="mk-meta">
+                    <span class="mk-status">{(entry.data as any).status || entry.data.type}</span>
+                    {entry.data.date && <span class="mk-date">{niceDate(entry.data.date)}</span>}
+                  </div>
+                  <a href={`/entry/${entry.id}/`} class="mk-title-link">
+                    <h3 class="mk-title">{entry.data.title}</h3>
+                  </a>
+                  {entry.data.description && <p class="mk-desc">{entry.data.description}</p>}
+                  {entry.data.cover && (
+                    <a href={`/entry/${entry.id}/`} class="mk-image-link">
+                      <figure class="mk-artifact">
+                        <img src={entry.data.cover} alt={entry.data.title} loading="lazy" />
+                      </figure>
+                    </a>
+                  )}
+                  <a href={`/entry/${entry.id}/`} class="mk-arrow">Open project →</a>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {mkExperiments.length > 0 && (
+          <section class="making-group making-experiments">
+            <h2 class="mg-label">Experiments & Tests</h2>
+            <div class="mg-grid">
+              {mkExperiments.map(entry => (
+                <article class="mk-item mk-experiment">
+                  <div class="mk-meta">
+                    <span class="mk-status">{(entry.data as any).status || 'experiment'}</span>
+                  </div>
+                  <a href={`/entry/${entry.id}/`} class="mk-title-link">
+                    <h3 class="mk-title">{entry.data.title}</h3>
+                  </a>
+                  {entry.data.description && <p class="mk-desc">{entry.data.description}</p>}
+                  <a href={`/entry/${entry.id}/`} class="mk-arrow">View details →</a>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {mkIdeas.length > 0 && (
+          <section class="making-group making-ideas">
+            <h2 class="mg-label">Sketches & Ideas</h2>
+            <div class="mg-list-small">
+              {mkIdeas.map(entry => (
+                <article class="mk-item mk-idea">
+                  <a href={`/entry/${entry.id}/`} class="mk-title-link">
+                    <h3 class="mk-title">{entry.data.title}</h3>
+                  </a>
+                  <div class="mk-meta">
+                    <span class="mk-type">{entry.data.type}</span>
+                    {(entry.data as any).status && <span class="mk-status">{(entry.data as any).status}</span>}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {mkOther.length > 0 && (
+          <section class="making-group making-archive">
+            <h2 class="mg-label">Past & Finished</h2>
+            <div class="mg-grid">
+              {mkOther.map(entry => (
+                <article class="mk-item mk-past">
+                  <div class="mk-meta">
+                    <span class="mk-status">{(entry.data as any).status || entry.data.type}</span>
+                  </div>
+                  <a href={`/entry/${entry.id}/`} class="mk-title-link">
+                    <h3 class="mk-title">{entry.data.title}</h3>
+                  </a>
+                  {entry.data.description && <p class="mk-desc">{entry.data.description}</p>}
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+        
+        {found.length === 0 && (
+          <p class="making-empty">The workshop is quiet right now.</p>
+        )}
+      </div>
+
+      <footer class="making-footer">
+        <p class="making-footer-label">Nothing here is ever quite finished.</p>
+        <div class="making-links">
+          <a href="/world/life/">Life</a>
+          <a href="/world/travel/">Travel</a>
+          <a href="/world/interests/">Interests</a>
+          <a href="/currently/">Currently</a>
+          <a href="/archive/">Archive</a>
+          <a href="/random/">Surprise Me</a>
+        </div>
+      </footer>
+    </article>
+  ) : (
+    <>
+      <section class={`page-intro world-intro ${definition[3]}`}>
+        <p class="label">A world in Raj’s corner</p>
+        <h1>{definition[1]}</h1>
+        <p class="lede">{definition[2]}</p>
+        <p class="small-count">{found.length} {found.length === 1 ? 'thing' : 'things'} here so far. This room will change.</p>
+      </section>
+      <EntryList entries={found} heading="Things to discover" />
+      <section class="world-footer">
+        <p class="label">Keep wandering</p>
+        <a href="/archive/">Open the whole archive →</a>
+        <a href="/random/">Show me something unexpected →</a>
+      </section>
+    </>
+  )}
+</Base>

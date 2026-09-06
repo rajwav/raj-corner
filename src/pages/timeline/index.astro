@@ -1,5 +1,62 @@
 ---
-import Base from '../../layouts/Base.astro'; import { entries, niceDate } from '../../lib/universe';
-const all = await entries(); const groups = Object.groupBy(all, x => x.data.date?.getFullYear() ?? 'Someday');
+import Base from '../../layouts/Base.astro';
+import { entries, placeSlug } from '../../lib/universe';
+
+const all = await entries();
+const groups = Object.groupBy(all, x => x.data.date?.getFullYear() ?? 'Someday');
+const sortedYears = Object.entries(groups).sort(([a],[b])=>b.localeCompare(a));
+
+// Formatter to get just the day and month
+const dayMonth = (date?: Date) => date ? date.toLocaleDateString('en', { month: 'short', day: 'numeric' }) : 'Unknown';
 ---
-<Base title="Timeline · Raj's Corner"><section class="page-intro"><p class="label">The chronological layer</p><h1>Time leaves clues.</h1><p class="lede">A slowly growing record of days, detours, milestones, and things that changed the shape of a year.</p></section><section class="timeline">{Object.entries(groups).sort(([a],[b])=>b.localeCompare(a)).map(([year,items]) => <div class="year"><h2>{year}</h2><div>{items?.map(e => <a href={`/entry/${e.id}/`}><time>{niceDate(e.data.date)}</time><span>{e.data.type}</span><strong>{e.data.title}</strong><i>→</i></a>)}</div></div>)}</section></Base>
+
+<Base title="The Timeline · Raj's Corner">
+  <article class="timeline-container">
+    <header class="timeline-header">
+      <span class="timeline-label">The Timeline</span>
+      <h1 class="timeline-title">Some things happened once.<br>Some things became eras.</h1>
+      <p class="timeline-lede">A chronological record of days, detours, milestones, and the traces that changed the shape of a year.</p>
+    </header>
+
+    <div class="timeline-track">
+      {sortedYears.map(([year, items], index) => (
+        <section class={`timeline-era ${index === 0 ? 'current-era' : ''}`}>
+          <div class="era-marker">
+            <h2 class="era-year">{year}</h2>
+            <span class="era-count">{items?.length} {items?.length === 1 ? 'trace' : 'traces'}</span>
+          </div>
+          
+          <div class="era-entries">
+            {items?.map(e => (
+              <div class="timeline-entry">
+                <div class="timeline-meta">
+                  <time class="timeline-date">{e.data.date ? dayMonth(e.data.date) : 'Undated'}</time>
+                  <span class="timeline-type">{e.data.type}</span>
+                </div>
+                
+                <div class="timeline-content">
+                  <a href={`/entry/${e.id}/`} class="timeline-entry-title">{e.data.title} <span>→</span></a>
+                  {e.data.description && <p class="timeline-entry-desc">{e.data.description}</p>}
+                  
+                  {e.data.location && (
+                    <a href={`/places/${placeSlug(e.data.location)}/`} class="timeline-location">
+                      Coordinates: {e.data.location}
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  </article>
+
+  <aside class="universe-continuation" style="margin-top: 60px;">
+    <div class="continuation-actions">
+      <a href="/places/" class="cont-action">Find a place →</a>
+      <a href="/archive/" class="cont-action">Wander the Archive →</a>
+      <a href="/random/" class="cont-action">Surprise Me →</a>
+    </div>
+  </aside>
+</Base>

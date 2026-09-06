@@ -23,3 +23,121 @@ async function editEntry(id){const entry=await request(`/api/entry/${encodeURICo
 async function loadCurrently(){const data=await request('/api/currently');const fields=['listening','learning','reading','watching','building','thinking','wanting','planning','obsessed'];const form=$('#currently-form');form.innerHTML=fields.map(field=>`<label>${field}<input name="${field}" value="${esc(data[field]||'')}" placeholder="Add what is true right now"></label>`).join('')+'<div class="actions"><button class="primary">Save currently <b>→</b></button><p class="form-message" role="status"></p></div>';form.onsubmit=async e=>{e.preventDefault();const values=Object.fromEntries(new FormData(form));await request('/api/currently',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(values)});$('.form-message').textContent='Saved.'};}
 async function loadLife(){const data=await request('/api/life-list');const form=$('#life-form');['done','next','someday'].forEach(key=>form.elements[key].value=(data[key]||[]).join('\n'));form.onsubmit=async e=>{e.preventDefault();const values=Object.fromEntries(['done','next','someday'].map(key=>[key,form.elements[key].value.split('\n').map(x=>x.trim()).filter(Boolean)]));await request('/api/life-list',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(values)});form.querySelector('.form-message').textContent='Saved.'};}
 loadEntries().catch(error=>alert(error.message));
+
+// Mention Autocomplete
+const storyTextarea = document.querySelector('textarea[name="story"]');
+const mentionBox = $('#mention-autocomplete');
+let mentionEntities = [];
+let mentionActive = false;
+let mentionStartIndex = -1;
+let mentionSelectedIndex = 0;
+let currentSuggestions = [];
+
+function buildEntityIndex() {
+  const list = [];
+  const places = new Set();
+  for (const e of entries) {
+    list.push({ id: e.id, label: e.title, type: e.type, insertText: e.id });
+    if (e.location) places.add(e.location);
+  }
+  for (const p of places) {
+    list.push({ id: `place-${p}`, label: p, type: 'place', insertText: p.replace(/\s+/g, '-') });
+  }
+  mentionEntities = list;
+}
+
+function closeMentionBox() {
+  mentionActive = false;
+  mentionBox.hidden = true;
+  mentionSelectedIndex = 0;
+}
+
+function renderMentions(query) {
+  const lowerQuery = query.toLowerCase();
+  currentSuggestions = mentionEntities.filter(e => e.label.toLowerCase().includes(lowerQuery) || e.insertText.toLowerCase().includes(lowerQuery)).slice(0, 8);
+  
+  if (currentSuggestions.length === 0) {
+    mentionBox.innerHTML = `<div class="mention-empty">No matches. <span class="mention-create">Create new entity… (Coming in Phase 5C+)</span></div>`;
+  } else {
+    mentionBox.innerHTML = currentSuggestions.map((e, i) => `
+      <div class="mention-item ${i === mentionSelectedIndex ? 'selected' : ''}" data-index="${i}">
+        <span class="mention-label">${esc(e.label)}</span>
+        <span class="mention-type">${esc(e.type)}</span>
+      </div>
+    `).join('') + `<div class="mention-item create-item" data-index="${currentSuggestions.length}">Create new entity…</div>`;
+  }
+  
+  mentionBox.hidden = false;
+  
+  mentionBox.querySelectorAll('.mention-item').forEach(el => {
+    el.onmousedown = (ev) => {
+      ev.preventDefault();
+      const idx = parseInt(el.dataset.index, 10);
+      if (idx === currentSuggestions.length) {
+        alert("Create new entity feature will be fully enabled in a future phase.");
+        closeMentionBox();
+      } else {
+        insertMention(currentSuggestions[idx]);
+      }
+    };
+  });
+}
+
+function insertMention(entity) {
+  const text = storyTextarea.value;
+  const before = text.slice(0, mentionStartIndex);
+  const after = text.slice(storyTextarea.selectionEnd);
+  const insert = `@${entity.insertText} `;
+  storyTextarea.value = before + insert + after;
+  storyTextarea.selectionStart = storyTextarea.selectionEnd = mentionStartIndex + insert.length;
+  closeMentionBox();
+  storyTextarea.focus();
+}
+
+storyTextarea.addEventListener('input', () => {
+  if (!mentionEntities.length) buildEntityIndex();
+  
+  const text = storyTextarea.value;
+  const pos = storyTextarea.selectionStart;
+  
+  // Find if we are currently typing a mention
+  const textBeforeCursor = text.slice(0, pos);
+  const match = textBeforeCursor.match(/(?:\s|^)(@[\w-]*)$/);
+  
+  if (match) {
+    mentionActive = true;
+    mentionStartIndex = pos - match[1].length + 1; // index after @
+    const query = match[1].slice(1);
+    mentionSelectedIndex = 0;
+    renderMentions(query);
+  } else {
+    closeMentionBox();
+  }
+});
+
+storyTextarea.addEventListener('keydown', (e) => {
+  if (!mentionActive) return;
+  
+  const totalItems = currentSuggestions.length > 0 ? currentSuggestions.length + 1 : 0; // +1 for "Create new"
+  
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    mentionSelectedIndex = (mentionSelectedIndex + 1) % totalItems;
+    renderMentions(storyTextarea.value.slice(mentionStartIndex, storyTextarea.selectionStart));
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    mentionSelectedIndex = (mentionSelectedIndex - 1 + totalItems) % totalItems;
+    renderMentions(storyTextarea.value.slice(mentionStartIndex, storyTextarea.selectionStart));
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (currentSuggestions.length > 0 && mentionSelectedIndex < currentSuggestions.length) {
+      insertMention(currentSuggestions[mentionSelectedIndex]);
+    } else {
+      alert("Create new entity feature will be fully enabled in a future phase.");
+      closeMentionBox();
+    }
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    closeMentionBox();
+  }
+});

@@ -1,7 +1,149 @@
 ---
-import Base from '../../layouts/Base.astro'; import { entries, niceDate, worldForType } from '../../lib/universe';
-const all = await entries(); const types = [...new Set(all.map(e=>e.data.type))].sort(); const years = [...new Set(all.map(e=>e.data.date?.getFullYear()).filter(Boolean))].sort().reverse(); const tags = [...new Set(all.flatMap(e=>e.data.tags))].sort();
+import Base from '../../layouts/Base.astro';
+import { entries, placeSlug } from '../../lib/universe';
+
+const all = await entries();
+const byYear: Record<number, typeof all> = {};
+const noYear: typeof all = [];
+let earliestYear: number | null = null;
+let latestYear: number | null = null;
+
+for (const e of all) {
+  const y = e.data.date?.getFullYear();
+  if (y) {
+    if (!byYear[y]) byYear[y] = [];
+    byYear[y].push(e);
+    if (earliestYear === null || y < earliestYear) earliestYear = y;
+    if (latestYear === null || y > latestYear) latestYear = y;
+  } else {
+    noYear.push(e);
+  }
+}
+
+const sortedYears = Object.keys(byYear).map(Number).sort((a,b)=>b-a);
+const total = all.length;
+let countStr = "The archive is still becoming.";
+if (total > 0) {
+  if (earliestYear && latestYear && earliestYear !== latestYear) {
+    countStr = `${total} traces across ${earliestYear}–${latestYear}.`;
+  } else {
+    countStr = `${total} traces so far.`;
+  }
+}
+
+function rowDate(d?: Date) {
+  if (!d) return '—';
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = d.toLocaleString('en', { month: 'short' }).toUpperCase();
+  return `${day} ${month}`;
+}
 ---
-<Base title="The archive · Raj's Corner"><section class="page-intro"><p class="label">Everything, in one place</p><h1>The archive.</h1><p class="lede">A library of trips, memories, photographs, interests and fragments. Filter it if you know what you’re seeking—or leave everything open and wander.</p></section><section class="archive"><div class="archive-controls"><label>Type <select id="type-filter"><option value="">Everything</option>{types.map(type=><option value={type}>{type}</option>)}</select></label><label>Year <select id="year-filter"><option value="">Any year</option>{years.map(year=><option value={year}>{year}</option>)}</select></label><label>Tag <select id="tag-filter"><option value="">Any tag</option>{tags.map(tag=><option value={tag}>{tag}</option>)}</select></label><button id="clear-filter">Clear</button></div><p id="archive-count" class="label">{all.length} entries in the archive</p><div class="archive-list">{all.map(entry => <a href={`/entry/${entry.id}/`} data-type={entry.data.type} data-year={entry.data.date?.getFullYear()} data-tags={entry.data.tags.join('|')}><span>{entry.data.type}</span><h2>{entry.data.title}</h2><p>{entry.data.location ?? niceDate(entry.data.date)} · {worldForType(entry.data.type)}</p><b>↗</b></a>)}</div></section><script is:inline>
-const params=new URLSearchParams(location.search), inputs={type:document.querySelector('#type-filter'),year:document.querySelector('#year-filter'),tag:document.querySelector('#tag-filter')}; for(const key in inputs){if(params.get(key)) inputs[key].value=params.get(key)}; const rows=[...document.querySelectorAll('.archive-list a')], count=document.querySelector('#archive-count'); function filter(){let visible=0;rows.forEach(row=>{const show=(!inputs.type.value||row.dataset.type===inputs.type.value)&&(!inputs.year.value||row.dataset.year===inputs.year.value)&&(!inputs.tag.value||row.dataset.tags.split('|').includes(inputs.tag.value));row.hidden=!show;if(show)visible++});count.textContent=`${visible} ${visible===1?'entry':'entries'} in the archive`};Object.values(inputs).forEach(input=>input.addEventListener('change',filter));document.querySelector('#clear-filter').addEventListener('click',()=>{Object.values(inputs).forEach(input=>input.value='');history.replaceState({},'',location.pathname);filter()});filter();
-</script></Base>
+<Base title="The Archive · Raj's Corner">
+  <article class="deep-archive night">
+    <header class="archive-header">
+      <div class="meta-item">
+        <span class="meta-label">THE ARCHIVE</span>
+        <span class="meta-value">Everything I've decided not to forget.</span>
+      </div>
+      <p class="archive-count" id="archive-count-display">{countStr}</p>
+      <div id="active-filter-ui" style="display: none;" class="active-filter-ui">
+        <span>Filtered by: <strong id="active-filter-name"></strong></span>
+        <a href="/archive/" class="clear-filter-link">Clear</a>
+      </div>
+    </header>
+
+    <div class="archive-groups">
+      {sortedYears.map(year => (
+        <section class="archive-year-group" data-year={year}>
+          <h2 class="year-marker">{year}</h2>
+          <div class="archive-rows">
+            {byYear[year].map(entry => (
+              <div class="archive-row" data-tags={entry.data.tags.join('|')}>
+                <div class="row-date">{rowDate(entry.data.date)}</div>
+                <div class="row-type">{entry.data.type}</div>
+                <div class="row-main">
+                  <a href={`/entry/${entry.id}/`} class="row-title">{entry.data.title}</a>
+                  {entry.data.tags.length > 0 && (
+                    <div class="row-tags">
+                      {entry.data.tags.map(t => <a href={`/archive/?tag=${encodeURIComponent(t)}`}>#{t}</a>)}
+                    </div>
+                  )}
+                </div>
+                {entry.data.location ? (
+                  <a href={`/places/${placeSlug(entry.data.location)}/`} class="row-location">{entry.data.location}</a>
+                ) : (
+                  <div class="row-location empty"></div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
+
+      {noYear.length > 0 && (
+        <section class="archive-year-group" data-year="undated">
+          <h2 class="year-marker">Undated</h2>
+          <div class="archive-rows">
+            {noYear.map(entry => (
+              <div class="archive-row" data-tags={entry.data.tags.join('|')}>
+                <div class="row-date">{rowDate(entry.data.date)}</div>
+                <div class="row-type">{entry.data.type}</div>
+                <div class="row-main">
+                  <a href={`/entry/${entry.id}/`} class="row-title">{entry.data.title}</a>
+                  {entry.data.tags.length > 0 && (
+                    <div class="row-tags">
+                      {entry.data.tags.map(t => <a href={`/archive/?tag=${encodeURIComponent(t)}`}>#{t}</a>)}
+                    </div>
+                  )}
+                </div>
+                {entry.data.location ? (
+                  <a href={`/places/${placeSlug(entry.data.location)}/`} class="row-location">{entry.data.location}</a>
+                ) : (
+                  <div class="row-location empty"></div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  </article>
+
+  <aside class="universe-continuation" style="margin-bottom: 80px;">
+    <div class="continuation-actions" style="justify-content: center; margin-top: 40px;">
+      <span style="font-family: var(--mono); font-size: 12px; opacity: 0.5; margin-right: 15px;">The archive has no end.</span>
+      <a href="/timeline/" class="cont-action">Explore time →</a>
+      <a href="/places/" class="cont-action">Find a place →</a>
+      <a href="/random/" class="cont-action">Surprise me →</a>
+    </div>
+  </aside>
+
+  <script is:inline>
+    const params = new URLSearchParams(location.search);
+    const tag = params.get('tag');
+    
+    if (tag) {
+      document.getElementById('active-filter-ui').style.display = 'flex';
+      document.getElementById('active-filter-name').textContent = '#' + tag;
+      
+      let visibleCount = 0;
+      document.querySelectorAll('.archive-year-group').forEach(group => {
+        let hasVisible = false;
+        group.querySelectorAll('.archive-row').forEach(row => {
+          const tags = row.getAttribute('data-tags').split('|');
+          if (tags.includes(tag)) {
+            row.style.display = 'flex';
+            hasVisible = true;
+            visibleCount++;
+          } else {
+            row.style.display = 'none';
+          }
+        });
+        group.style.display = hasVisible ? 'block' : 'none';
+      });
+      
+      const countEl = document.getElementById('archive-count-display');
+      countEl.textContent = `${visibleCount} trace${visibleCount !== 1 ? 's' : ''} for #${tag}.`;
+    }
+  </script>
+</Base>

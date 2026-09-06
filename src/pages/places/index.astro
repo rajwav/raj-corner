@@ -1,5 +1,42 @@
 ---
-import Base from '../../layouts/Base.astro'; import { entries } from '../../lib/universe';
-const all = await entries(); const places = [...new Set(all.map(x=>x.data.location).filter(Boolean))];
+import Base from '../../layouts/Base.astro';
+import { entries, placeSlug } from '../../lib/universe';
+
+const all = await entries();
+const placesData = [...new Set(all.map(x=>x.data.location).filter(Boolean))].map(name => {
+  const traces = all.filter(e => e.data.location === name);
+  return { name, slug: placeSlug(String(name)), traces, count: traces.length };
+});
+
+placesData.sort((a, b) => b.count - a.count || String(a.name).localeCompare(String(b.name)));
 ---
-<Base title="Places · Raj's Corner"><section class="page-intro"><p class="label">The places index</p><h1>Every place holds more than a pin.</h1><p class="lede">Visits, photographs, future plans, meals, people, routes, and the strange feeling of remembering a specific light.</p></section><section class="place-map"><div class="map-paper"><span class="pin p1">Puri</span><span class="pin p2">Bengaluru</span><span class="pin p3">Kerala?</span><span class="map-note">A hand-drawn map<br />of where the stories point.</span></div><aside><p class="label">Places in the archive</p>{places.map(place => <div><h3>{place}</h3><p>{all.filter(e=>e.data.location===place).map(e=><a href={`/entry/${e.id}/`}>{e.data.title}</a>)}</p></div>)}<div><h3>Future pins</h3><p>Japan · Iceland · a long road with no schedule</p></div></aside></section></Base>
+
+<Base title="The Atlas · Raj's Corner">
+  <article class="atlas-container">
+    <header class="atlas-header">
+      <span class="atlas-label">The Atlas</span>
+      <h1 class="atlas-title">Coordinates & Crossings.</h1>
+      <p class="atlas-lede">Not a map of the world, but a map of where the stories point. These are the places that hold memories, trips, photographs, and quiet traces in the archive.</p>
+    </header>
+
+    <section class="atlas-catalog">
+      <div class="atlas-grid">
+        {placesData.map((place, index) => (
+          <a href={`/places/${place.slug}/`} class="place-card">
+            <div class="place-card-meta">
+              <span class="place-index">No. {String(index + 1).padStart(2, '0')}</span>
+              <span class="place-count">{place.count} {place.count === 1 ? 'trace' : 'traces'}</span>
+            </div>
+            <h2 class="place-name">{place.name}</h2>
+            <div class="place-traces">
+              {place.traces.slice(0, 3).map(t => (
+                <span class="trace-badge">{t.data.type}</span>
+              ))}
+              {place.traces.length > 3 && <span class="trace-badge">+{place.traces.length - 3}</span>}
+            </div>
+          </a>
+        ))}
+      </div>
+    </section>
+  </article>
+</Base>

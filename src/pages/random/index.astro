@@ -1,5 +1,149 @@
 ---
+import Base from '../../layouts/Base.astro';
 import { entries } from '../../lib/universe';
-const choices = (await entries()).map(entry => `/entry/${entry.id}/`);
+import { parseMentionsInText } from '../../lib/mentions';
+
+const all = await entries();
+const validEntries = all.filter(e => e.body && e.body.length > 10);
+
+const paths = [];
+
+for (const e of validEntries) {
+  // Related
+  for (const rId of e.data.related) {
+    const r = validEntries.find(x => x.id === rId);
+    if (r) {
+      paths.push({
+        origin: e.data.title,
+        dest: r.data.title,
+        destUrl: `/entry/${r.id}/`,
+        destDesc: r.data.description || `A ${r.data.type} from ${r.data.date?.getFullYear() || 'the archive'}.`,
+        explanation: 'Connected through an explicit link.'
+      });
+    }
+  }
+
+  // Location
+  if (e.data.location) {
+    const sameLoc = validEntries.filter(x => x.id !== e.id && x.data.location === e.data.location);
+    for (const s of sameLoc) {
+      paths.push({
+        origin: e.data.title,
+        dest: s.data.title,
+        destUrl: `/entry/${s.id}/`,
+        destDesc: s.data.description || `A ${s.data.type} from ${s.data.date?.getFullYear() || 'the archive'}.`,
+        explanation: `Connected through ${e.data.location}.`
+      });
+    }
+  }
+
+  // Tags
+  for (const t of e.data.tags) {
+    const sameTag = validEntries.filter(x => x.id !== e.id && x.data.tags.includes(t));
+    for (const s of sameTag) {
+      paths.push({
+        origin: e.data.title,
+        dest: s.data.title,
+        destUrl: `/entry/${s.id}/`,
+        destDesc: s.data.description || `A ${s.data.type} from ${s.data.date?.getFullYear() || 'the archive'}.`,
+        explanation: `Connected through the same memory thread (#${t}).`
+      });
+    }
+  }
+
+  // Mentions
+  const mentions = await parseMentionsInText(e.body || '');
+  for (const m of mentions) {
+    if (m.type === 'entry') {
+      const target = validEntries.find(x => x.id === m.id);
+      if (target && target.id !== e.id) {
+         paths.push({
+            origin: e.data.title,
+            dest: target.data.title,
+            destUrl: `/entry/${target.id}/`,
+            destDesc: target.data.description || `A ${target.data.type} from ${target.data.date?.getFullYear() || 'the archive'}.`,
+            explanation: `Connected through a mention in the text.`
+         });
+      }
+    } else if (m.type === 'place') {
+      paths.push({
+          origin: e.data.title,
+          dest: m.name,
+          destUrl: m.url,
+          destDesc: `The atlas record for ${m.name}.`,
+          explanation: `Connected through ${m.name}.`
+      });
+    }
+  }
+}
+
+// Ensure uniqueness (simple stringify)
+const uniquePathsMap = new Map();
+for (const p of paths) {
+  uniquePathsMap.set(`${p.origin}->${p.destUrl}`, p);
+}
+const finalPaths = Array.from(uniquePathsMap.values());
 ---
-<!doctype html><title>Finding something…</title><p>Finding something unexpected…</p><script is:inline define:vars={{ choices }}>location.replace(choices[Math.floor(Math.random() * choices.length)]);</script>
+<Base title="Surprise Me · Raj's Corner">
+  <article class="surprise-page">
+    <header class="surprise-header">
+      <div class="meta-item">
+        <span class="meta-label">SURPRISE ME</span>
+        <span class="meta-value">Not everything needs a reason.</span>
+      </div>
+    </header>
+
+    <div class="surprise-content" id="surprise-container" style="display: none;">
+      <p class="surprise-preamble">You landed here because:</p>
+      
+      <div class="surprise-path">
+        <div class="path-node" id="path-origin"></div>
+        <div class="path-arrow">↓</div>
+        <div class="path-explanation" id="path-explanation"></div>
+        <div class="path-arrow">↓</div>
+        <div class="path-node dest-node">
+          <h2 id="path-dest"></h2>
+          <p id="path-desc"></p>
+        </div>
+      </div>
+
+      <div class="surprise-actions">
+        <a href="#" id="path-link" class="primary-button">Follow the thread →</a>
+        <button id="next-surprise" class="secondary-button">Another surprise</button>
+      </div>
+    </div>
+  </article>
+
+  <script is:inline define:vars={{ finalPaths }}>
+    if (finalPaths.length === 0) {
+      document.getElementById('surprise-container').innerHTML = '<p>No serendipitous connections found yet. Build the archive.</p>';
+      document.getElementById('surprise-container').style.display = 'block';
+    } else {
+      function showSurprise() {
+        const path = finalPaths[Math.floor(Math.random() * finalPaths.length)];
+        const container = document.getElementById('surprise-container');
+        
+        container.style.opacity = '0';
+        
+        setTimeout(() => {
+          document.getElementById('path-origin').textContent = path.origin;
+          document.getElementById('path-explanation').textContent = path.explanation;
+          document.getElementById('path-dest').textContent = path.dest;
+          document.getElementById('path-desc').textContent = path.destDesc;
+          document.getElementById('path-link').href = path.destUrl;
+          
+          if (container.style.display === 'none') {
+             container.style.display = 'block';
+          }
+          container.style.opacity = '1';
+        }, 150);
+      }
+
+      document.getElementById('next-surprise').addEventListener('click', (e) => {
+        e.preventDefault();
+        showSurprise();
+      });
+      showSurprise();
+    }
+  </script>
+</Base>

@@ -1,7 +1,75 @@
 ---
-import Base from '../../layouts/Base.astro'; import EntryList from '../../components/EntryList.astro'; import { entries, placeSlug } from '../../lib/universe';
+import Base from '../../layouts/Base.astro';
+import { entries, niceDate, placeSlug } from '../../lib/universe';
+
+
+export async function getStaticPaths() {
+  const all = await entries();
+  const places = [...new Set(all.map(x => x.data.location).filter(Boolean))];
+  return places.map(place => ({ params: { place: placeSlug(String(place)) }, props: { place: String(place) } }));
+}
+
+const { place } = Astro.props;
 const all = await entries();
-export async function getStaticPaths() { const names = [...new Set((await entries()).map(e=>e.data.location).filter((x): x is string => Boolean(x)))]; return names.map(place => ({ params:{ place:placeSlug(place) }, props:{place} })); }
-const { place } = Astro.props; const found = all.filter(entry => entry.data.location === place);
+
+const explicitEntries = all.filter(x => x.data.location === place);
+
+const mentionMatches = [];
+const hyphenatedPlace = place.toLowerCase().replace(/\s+/g, '-');
+const placePattern = new RegExp(`@(?:${place.toLowerCase().replace(/[^a-z0-9]/g, '[\\s-]*')}|${hyphenatedPlace})\\b`, 'i');
+
+for (const e of all) {
+  if (e.data.location === place) continue;
+  if (e.body && placePattern.test(e.body)) {
+    mentionMatches.push(e);
+  }
+}
 ---
-<Base title={`${place} · Places · Raj's Corner`}><section class="page-intro"><p class="label">A place in the archive</p><h1>{place}</h1><p class="lede">Everything here that touches this place: trips, photographs, fragments, and whatever it becomes attached to later.</p></section><EntryList entries={found} heading={`Found around ${place}`} /><section class="world-footer"><p class="label">Elsewhere</p><a href="/places/">Back to all places →</a><a href="/archive/">Open the archive →</a></section></Base>
+<Base title={`${place} · Raj's Corner`}>
+  <article class="atlas-container">
+    <header class="atlas-header">
+      <span class="atlas-label">Coordinates // Atlas</span>
+      <h1 class="atlas-title">{place}</h1>
+      <p class="atlas-count">
+        {explicitEntries.length + mentionMatches.length} traces found.
+      </p>
+    </header>
+
+    {explicitEntries.length > 0 && (
+      <section class="atlas-section">
+        <h2 class="atlas-section-title">Traces found here</h2>
+        <div class="atlas-grid">
+          {explicitEntries.map(entry => (
+            <a href={`/entry/${entry.id}/`} class="atlas-card">
+              <span class="ac-date">{niceDate(entry.data.date)}</span>
+              <span class="ac-type">{entry.data.type}</span>
+              <h3 class="ac-title">{entry.data.title}</h3>
+            </a>
+          ))}
+        </div>
+      </section>
+    )}
+
+    {mentionMatches.length > 0 && (
+      <section class="atlas-section">
+        <h2 class="atlas-section-title">Mentioned in</h2>
+        <div class="atlas-grid">
+          {mentionMatches.map(entry => (
+            <a href={`/entry/${entry.id}/`} class="atlas-card mention-card">
+              <span class="ac-date">{niceDate(entry.data.date)}</span>
+              <span class="ac-type">{entry.data.type}</span>
+              <h3 class="ac-title">{entry.data.title}</h3>
+            </a>
+          ))}
+        </div>
+      </section>
+    )}
+
+    <aside class="universe-continuation">
+      <div class="continuation-actions">
+        <a href="/places/" class="cont-action">Return to Atlas →</a>
+        <a href="/random/" class="cont-action">Surprise Me →</a>
+      </div>
+    </aside>
+  </article>
+</Base>

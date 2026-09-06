@@ -1,6 +1,138 @@
 ---
-import { getCollection, render } from 'astro:content'; import Base from '../../layouts/Base.astro'; import { niceDate, placeSlug, worldForType } from '../../lib/universe';
-export async function getStaticPaths() { const entries = await getCollection('entries'); return entries.map(entry => ({ params:{slug:entry.id}, props:{entry} })); }
-const { entry } = Astro.props; const { Content } = await render(entry); const all = await getCollection('entries'); const related = all.filter(x=>entry.data.related.includes(x.id));
+import { getCollection, render } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+import { niceDate, placeSlug, worldForType } from '../../lib/universe';
+import { parseMentionsInText } from '../../lib/mentions';
+
+export async function getStaticPaths() {
+  const entries = await getCollection('entries');
+  return entries.map(entry => ({ params: { slug: entry.id }, props: { entry } }));
+}
+
+const { entry } = Astro.props;
+const { Content } = await render(entry);
+const all = (await getCollection('entries')).sort((a,b) => Number(b.data.date ?? 0) - Number(a.data.date ?? 0));
+
+// Compute relationships
+const related = all.filter(x => entry.data.related.includes(x.id));
+const connectedFrom = all.filter(x => x.data.related.includes(entry.id) && x.id !== entry.id);
+const samePlace = entry.data.location ? all.filter(x => x.data.location === entry.data.location && x.id !== entry.id) : [];
+const sameTags = entry.data.tags.length > 0 ? all.filter(x => x.id !== entry.id && x.data.tags.some(t => entry.data.tags.includes(t))) : [];
+
+const rawMentions = await parseMentionsInText(entry.body || '');
+const resolvedMentions = rawMentions.filter(m => m.type !== 'unknown');
+
+const titleMentionStr = `@${entry.data.title}`;
+const idMentionStr = `@${entry.id}`;
+const mentionedBy = all.filter(x => x.id !== entry.id && 
+  ((x.body || '').toLowerCase().includes(titleMentionStr.toLowerCase()) || (x.body || '').toLowerCase().includes(idMentionStr.toLowerCase()))
+);
+
+// Timeline Neighbors
+const timelineIndex = all.findIndex(x => x.id === entry.id);
+const timelineNeighbors = [];
+if (timelineIndex > 0) timelineNeighbors.push(all[timelineIndex - 1]);
+if (timelineIndex < all.length - 1 && timelineIndex !== -1) timelineNeighbors.push(all[timelineIndex + 1]);
+
+// Curation Logic
+const threads: {url: string, title: string, typeLabel: string}[] = [];
+const seenUrls = new Set();
+function addThread(url: string, title: string, typeLabel: string) {
+  if (seenUrls.has(url)) return;
+  seenUrls.add(url);
+  threads.push({ url, title, typeLabel });
+}
+
+// 1. Explicit
+for (const item of related) addThread(`/entry/${item.id}/`, item.data.title, 'Explicitly linked');
+for (const item of connectedFrom) addThread(`/entry/${item.id}/`, item.data.title, 'Referenced by');
+
+// 2. Mentions
+for (const m of resolvedMentions) { if (m.url && m.name) addThread(m.url, m.name, m.type === 'place' ? 'Mentioned location' : 'Mentioned entity'); }
+for (const m of mentionedBy) addThread(`/entry/${m.id}/`, m.data.title, 'Mentioned in');
+
+// 3. Place
+if (entry.data.location) {
+  addThread(`/places/${placeSlug(entry.data.location)}/`, entry.data.location, 'Location');
+}
+
+// 4. Same place
+for (const item of samePlace.slice(0, 2)) addThread(`/entry/${item.id}/`, item.data.title, 'Same place');
+
+// 5. Same tag
+for (const item of sameTags.slice(0, 2)) addThread(`/entry/${item.id}/`, item.data.title, 'Related thread');
+
+// 6. Timeline neighbor
+if (threads.length < 5) {
+  for (const item of timelineNeighbors) addThread(`/entry/${item.id}/`, item.data.title, 'Adjacent in time');
+}
+
+const curatedThreads = threads.slice(0, 5);
 ---
-<Base title={`${entry.data.title} · Raj's Corner`}><article class={`entry-page ${entry.data.accent}`}><a class="crumb" href={`/world/${worldForType(entry.data.type)}/`}>← Back to this world</a><div class="entry-meta"><span>{entry.data.type}</span>{entry.data.location ? <a href={`/places/${placeSlug(entry.data.location)}/`}>{entry.data.location}</a> : <span>{niceDate(entry.data.date)}</span>}<span>{niceDate(entry.data.date)}</span></div><h1>{entry.data.title}</h1><p class="entry-description">{entry.data.description}</p><div class="prose"><Content /></div><div class="tags">{entry.data.tags.map(tag=><a href={`/archive/?tag=${encodeURIComponent(tag)}`}>#{tag}</a>)}</div></article>{related.length>0 && <section class="related"><p class="label">Connected to</p><h2>Follow a thread.</h2><div>{related.map(item=><a href={`/entry/${item.id}/`}><span>{item.data.type}</span><strong>{item.data.title}</strong> →</a>)}</div></section>}</Base>
+<Base title={`${entry.data.title} · Raj's Corner`}>
+  <article class={`artifact-page ${entry.data.accent}`}>
+    <div class="artifact-header">
+      <div class="artifact-metadata">
+        <div class="meta-item">
+          <span class="meta-label">Type</span>
+          <span class="meta-value">{entry.data.type}</span>
+        </div>
+        {entry.data.date && (
+          <div class="meta-item">
+            <span class="meta-label">Date</span>
+            <span class="meta-value">{niceDate(entry.data.date)}</span>
+          </div>
+        )}
+        {entry.data.location && (
+          <div class="meta-item">
+            <span class="meta-label">Coordinates</span>
+            <a href={`/places/${placeSlug(entry.data.location)}/`} class="meta-value link">{entry.data.location}</a>
+          </div>
+        )}
+        <div class="meta-item">
+          <span class="meta-label">World</span>
+          <a href={`/world/${worldForType(entry.data.type)}/`} class="meta-value link">{worldForType(entry.data.type)}</a>
+        </div>
+      </div>
+      <div class="artifact-title-group">
+        <h1>{entry.data.title}</h1>
+        <p class="entry-description">{entry.data.description}</p>
+      </div>
+    </div>
+    {entry.data.cover && (
+      <figure class="artifact-cover">
+        <img src={entry.data.cover} alt={entry.data.title} />
+        <figcaption>Artifact record: {entry.data.title} / {entry.data.location || 'Unknown'} / {niceDate(entry.data.date)}</figcaption>
+      </figure>
+    )}
+    <div class="artifact-body">
+      <div class="prose"><Content /></div>
+      {entry.data.tags.length > 0 && (
+        <div class="artifact-tags">
+          <span class="meta-label">Index Tags:</span>
+          {entry.data.tags.map(tag=><a href={`/archive/?tag=${encodeURIComponent(tag)}`}>#{tag}</a>)}
+        </div>
+      )}
+    </div>
+  </article>
+
+  <aside class="universe-continuation">
+    {curatedThreads.length > 0 && (
+      <div class="continuation-block">
+        <h3>FOLLOW THE THREAD</h3>
+        <ul class="continuation-list">
+          {curatedThreads.map(t => (
+            <li>
+              <span class="cont-meta">{t.typeLabel}</span>
+              <a href={t.url} class="cont-link">{t.title}</a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )}
+    <div class="continuation-actions">
+      <a href="/random/" class="cont-action">Surprise Me →</a>
+      <a href="/archive/" class="cont-action">Wander the Archive →</a>
+    </div>
+  </aside>
+</Base>
