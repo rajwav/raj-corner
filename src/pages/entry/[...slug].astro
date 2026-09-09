@@ -3,6 +3,7 @@ import { getCollection, render } from 'astro:content';
 import Base from '../../layouts/Base.astro';
 import { niceDate, placeSlug, worldForType } from '../../lib/universe';
 import { parseMentionsInText } from '../../lib/mentions';
+import { renderEntryHeader, renderEntryCover, renderEntryTags, renderPersonTraces, renderContinuation, getPresentationClasses } from '../../lib/entryTemplate.js';
 
 export async function getStaticPaths() {
   const entries = await getCollection('entries');
@@ -68,71 +69,85 @@ if (threads.length < 5) {
 }
 
 const curatedThreads = threads.slice(0, 5);
+
+// Person Traces
+const personTraces: typeof all = [];
+if (entry.data.type === 'person') {
+  const seenTraces = new Set();
+  const addTrace = (item: any) => {
+    if (seenTraces.has(item.id)) return;
+    seenTraces.add(item.id);
+    personTraces.push(item);
+  };
+
+  // 1. Mentions
+  for (const m of mentionedBy) addTrace(m);
+
+  // 2. PEOPLE field
+  for (const x of all) {
+    if (x.id !== entry.id && (x.data.people || []).some(p => p.toLowerCase() === entry.data.title.toLowerCase() || p.toLowerCase() === entry.id.toLowerCase() || p.toLowerCase().replace(/ /g, '-') === entry.id.toLowerCase())) {
+      addTrace(x);
+    }
+  }
+
+  // 3. Related Entries
+  for (const x of connectedFrom) addTrace(x);
+
+  personTraces.sort((a, b) => {
+    if (a.data.date && b.data.date) return Number(b.data.date) - Number(a.data.date);
+    if (a.data.date) return -1;
+    if (b.data.date) return 1;
+    return a.data.title.localeCompare(b.data.title);
+  });
+}
+
 ---
 <Base title={`${entry.data.title} · Raj's Corner`}>
-  <article class={`artifact-page ${entry.data.accent}`}>
-    <div class="artifact-header">
-      <div class="artifact-metadata">
-        <div class="meta-item">
-          <span class="meta-label">Type</span>
-          <span class="meta-value">{entry.data.type}</span>
-        </div>
-        {entry.data.date && (
-          <div class="meta-item">
-            <span class="meta-label">Date</span>
-            <span class="meta-value">{niceDate(entry.data.date)}</span>
-          </div>
-        )}
-        {entry.data.location && (
-          <div class="meta-item">
-            <span class="meta-label">Coordinates</span>
-            <a href={`/places/${placeSlug(entry.data.location)}/`} class="meta-value link">{entry.data.location}</a>
-          </div>
-        )}
-        <div class="meta-item">
-          <span class="meta-label">World</span>
-          <a href={`/world/${worldForType(entry.data.type)}/`} class="meta-value link">{worldForType(entry.data.type)}</a>
-        </div>
-      </div>
-      <div class="artifact-title-group">
-        <h1>{entry.data.title}</h1>
-        <p class="entry-description">{entry.data.description}</p>
-      </div>
-    </div>
-    {entry.data.cover && (
-      <figure class="artifact-cover">
-        <img src={entry.data.cover} alt={entry.data.title} />
-        <figcaption>Artifact record: {entry.data.title} / {entry.data.location || 'Unknown'} / {niceDate(entry.data.date)}</figcaption>
-      </figure>
-    )}
-    <div class="artifact-body">
+    <article class={`artifact-page ${entry.data.accent} ${entry.data.type === 'person' ? 'person-artifact' : ''} ${getPresentationClasses(entry.data.presentation)}`}>
+    <div set:html={renderEntryHeader(entry.data, entry.data.type === 'person', niceDate(entry.data.date), placeSlug(entry.data.location || ''), worldForType(entry.data.type))} />
+    <div set:html={renderEntryCover(entry.data, entry.data.type === 'person', niceDate(entry.data.date))} />
+
+    <div class={`artifact-body ${entry.data.type === 'person' ? 'person-body' : ''}`}>
       <div class="prose"><Content /></div>
-      {entry.data.tags.length > 0 && (
-        <div class="artifact-tags">
-          <span class="meta-label">Index Tags:</span>
-          {entry.data.tags.map(tag=><a href={`/archive/?tag=${encodeURIComponent(tag)}`}>#{tag}</a>)}
-        </div>
-      )}
+      <div set:html={renderEntryTags(entry.data.tags)} />
     </div>
+    
+    <div set:html={renderPersonTraces(personTraces, niceDate)} />
   </article>
 
-  <aside class="universe-continuation">
-    {curatedThreads.length > 0 && (
-      <div class="continuation-block">
-        <h3>FOLLOW THE THREAD</h3>
-        <ul class="continuation-list">
-          {curatedThreads.map(t => (
-            <li>
-              <span class="cont-meta">{t.typeLabel}</span>
-              <a href={t.url} class="cont-link">{t.title}</a>
-            </li>
-          ))}
-        </ul>
-      </div>
-    )}
-    <div class="continuation-actions">
-      <a href="/random/" class="cont-action">Surprise Me →</a>
-      <a href="/archive/" class="cont-action">Wander the Archive →</a>
-    </div>
-  </aside>
+<div set:html={renderContinuation(curatedThreads)} />
+
+<script>
+  // Promote markdown image titles to figcaptions in the preview
+  document.querySelectorAll('.prose img').forEach((el) => {
+    const img = el; // let JS duck-typing handle it in browser, but we'll use getAttribute for TS
+    if (!img.closest('figure')) {
+      const src = img.getAttribute('src');
+      const title = img.getAttribute('title');
+      if (!title && !(src && src.includes('#'))) return;
+      
+      const fig = document.createElement('figure');
+      fig.className = 'story-image-figure';
+      
+      if (src && src.includes('#')) {
+        const hash = src.split('#')[1];
+        const params = new URLSearchParams(hash);
+        if (params.get('s')) fig.classList.add('s-' + params.get('s'));
+        if (params.get('a')) fig.classList.add('a-' + params.get('a'));
+        if (params.get('t')) fig.classList.add('t-' + params.get('t'));
+      }
+      
+      if (img.parentNode) {
+        img.parentNode.insertBefore(fig, img);
+        fig.appendChild(img);
+        if (title) {
+          const cap = document.createElement('figcaption');
+          cap.textContent = title;
+          fig.appendChild(cap);
+        }
+      }
+    }
+  });
+</script>
+
 </Base>

@@ -11,7 +11,13 @@
   },
   "dependencies": {
     "@astrojs/check": "^0.9.10",
+    "@astrojs/react": "^6.0.5",
+    "@blocknote/core": "^0.54.2",
+    "@blocknote/mantine": "^0.54.2",
+    "@blocknote/react": "^0.54.2",
     "astro": "^7.3.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "typescript": "^5.7.0"
   }
 }

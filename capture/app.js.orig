@@ -114,7 +114,6 @@ function simpleMarkdown(text) {
 }
 
 function updatePreview() {
-  window.updatePreview = updatePreview;
   if (entryForm.elements.story && typeof parseMarkdownToBlocks !== 'undefined') {
     // Only re-parse if storyBlocks is fundamentally mismatched or we just loaded a new entry
     // Actually, it's safer to just always sync when updatePreview is called from an external load.
@@ -887,19 +886,15 @@ function restoreSnapshot(index) {
 }
 
 window.restoreSnapshot = restoreSnapshot;
-
-function undo() {
-  if (historyIndex > 0) restoreSnapshot(historyIndex - 1);
-}
-function redo() {
-  if (historyIndex < historyStack.length - 1) restoreSnapshot(historyIndex + 1);
-}
-
-window.undo = undo;
-window.redo = redo;
-
 if (btnUndo) btnUndo.onclick = undo;
 if (btnRedo) btnRedo.onclick = redo;
+
+window.undo = function() {
+  if (historyIndex > 0) restoreSnapshot(historyIndex - 1);
+};
+window.redo = function() {
+  if (historyIndex < historyStack.length - 1) restoreSnapshot(historyIndex + 1);
+};
 
 function updateHistoryUI() {
   if (!btnUndo) return;
@@ -983,10 +978,6 @@ function initCanvasEditor() {
   if (titleEl) {
     titleEl.contentEditable = 'true';
     titleEl.style.outline = 'none';
-    titleEl.dataset.placeholder = 'Untitled';
-    if (!titleEl.innerText.trim() || titleEl.innerText.trim() === 'Untitled') {
-      titleEl.innerHTML = '';
-    }
     titleEl.oninput = (e) => {
       if (entryForm.elements.title) {
         entryForm.elements.title.value = e.target.innerText.trim();
@@ -998,10 +989,7 @@ function initCanvasEditor() {
   if (descEl) {
     descEl.contentEditable = 'true';
     descEl.style.outline = 'none';
-    descEl.dataset.placeholder = 'Add a short description...';
-    if (!descEl.innerText.trim()) {
-      descEl.innerHTML = '';
-    }
+    descEl.dataset.placeholder = 'Optional brief summary...';
     descEl.oninput = (e) => {
       if (entryForm.elements.description) {
         entryForm.elements.description.value = e.target.innerText.trim();
@@ -1011,24 +999,7 @@ function initCanvasEditor() {
   }
   
   if (proseEl) {
-    if (window.USE_BLOCKNOTE_POC) {
-      proseEl.innerHTML = '<div id="blocknote-container"></div>';
-      import('./blocknote-poc.js').then(module => {
-        const markdown = storyBlocks.map(b => b.raw).join('\n\n');
-        module.mountBlockNotePOC('blocknote-container', markdown);
-      });
-      // Ensure CSS is loaded
-      if (!document.getElementById('blocknote-css')) {
-        const link = document.createElement('link');
-        link.id = 'blocknote-css';
-        link.rel = 'stylesheet';
-        link.href = '/blocknote-poc.css';
-        document.head.appendChild(link);
-      }
-    } else {
-      import('./blocknote-poc.js').then(module => module.unmountBlockNotePOC());
-      renderCanvasBlocks(proseEl);
-    }
+    renderCanvasBlocks(proseEl);
   }
 }
 
@@ -1047,14 +1018,13 @@ function renderCanvasBlocks(container) {
     wrap.style.cssText = 'position:relative; margin-bottom:1em; outline:none; transition:box-shadow 0.2s; border-radius:4px;';
     
     let html = typeof marked !== 'undefined' ? marked.parse(block.raw) : block.raw;
-    if (!html.trim()) html = '';
     
     wrap.innerHTML = `
       <div class="block-drag-handle" style="position:absolute; left:-40px; top:4px; display:flex; flex-direction:column; gap:4px; opacity:0; transition:opacity 0.2s;">
         <div style="cursor:grab; color:var(--text-light); padding:4px; line-height:1;" title="Drag to move">≡</div>
-        <button type="button" onclick="deleteBlock(${index})" style="background:transparent; border:none; color:red; cursor:pointer; padding:4px; line-height:1; font-size:12px;" title="Delete Block">×</button>
+        <button type="button" onclick="deleteBlock(\$\{index\})" style="background:transparent; border:none; color:red; cursor:pointer; padding:4px; line-height:1; font-size:12px;" title="Delete Block">×</button>
       </div>
-      <div class="canvas-block-content" contenteditable="true" data-placeholder="Start writing..." style="outline:none; min-height:1.5em;">${html}</div>
+      <div class="canvas-block-content" contenteditable="true" style="outline:none; min-height:1.5em;">${html}</div>
       <div class="canvas-block-add" style="position:absolute; left:50%; bottom:-16px; transform:translateX(-50%); opacity:0; transition:opacity 0.2s; background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:2px 8px; z-index:10; font-family:var(--mono); font-size:10px; display:flex; gap:4px; white-space:nowrap; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
         <span style="color:var(--accent);">+</span>
         <button type="button" class="secondary rt-btn" onclick="addBlock(${index}, 'p')" style="padding:2px 4px; border:none; cursor:pointer;">Text</button>
@@ -1182,7 +1152,8 @@ const newBtnRedo = document.getElementById('btn-redo');
 
 if (btnBackEntries) btnBackEntries.onclick = () => { show('entries'); };
 if (btnSaveCanvas) btnSaveCanvas.onclick = () => { 
-  $('#entry-form').requestSubmit();
+  const evt = new Event('submit', {cancelable: true});
+  $('#entry-form').dispatchEvent(evt);
 };
 
 if (newBtnUndo) newBtnUndo.onclick = window.undo;
@@ -1328,4 +1299,3 @@ function updateStoryFromBlocks() {
 
 window.parseMarkdownToBlocks = parseMarkdownToBlocks;
 window.updateStoryFromBlocks = updateStoryFromBlocks;
-window.updatePreview = updatePreview;

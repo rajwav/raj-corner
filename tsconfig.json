@@ -1,1 +1,4 @@
-{ "extends": "astro/tsconfigs/strict" }
+{
+  "extends": "astro/tsconfigs/strict",
+  "exclude": ["capture/blocknote-poc.js", "reference"]
+}

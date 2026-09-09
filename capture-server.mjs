@@ -10,7 +10,7 @@ const publicImages = path.join(root, 'public/images');
 const trashDir = path.join(root, '.trash');
 const currentlyFile = path.join(root, 'src/content/currently/now.md');
 const lifeListFile = path.join(root, 'src/content/lifeLists/life-list.md');
-const types = ['memory','travel','photo','car','music','thought','idea','experiment','place','milestone','dream'];
+const types = ['person','memory','travel','photo','car','music','thought','idea','experiment','place','milestone','dream'];
 const accents = { memory:'sand', travel:'coral', photo:'sky', car:'sky', music:'lime', thought:'lime', idea:'lime', experiment:'sky', place:'coral', milestone:'sand', dream:'night' };
 
 const json = (res, status, value) => { res.writeHead(status, { 'content-type':'application/json; charset=utf-8' }); res.end(JSON.stringify(value)); };
@@ -25,7 +25,7 @@ async function walk(dir) { const files = await fs.readdir(dir, { withFileTypes:t
 function parseArray(value='') { try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : []; } catch { return value.replace(/^\[|\]$/g,'').split(',').map(x=>x.trim()).filter(Boolean); } }
 function parseFrontmatter(raw) {
   const match = raw.match(/^---\s*\n([\s\S]*?)\n---\s*\n?([\s\S]*)$/); if (!match) return { data:{}, body:raw };
-  const data = {}; for (const line of match[1].split('\n')) { const hit=line.match(/^([\w-]+):\s*(.*)$/); if (!hit) continue; let [,key,value]=hit; value=value.trim(); if (value.startsWith('"')) { try { value=JSON.parse(value); } catch {} } else if (value.startsWith('[')) value=parseArray(value); else if (value === 'true' || value === 'false') value=value === 'true'; data[key]=value; }
+  const data = {}; for (const line of match[1].split('\n')) { const hit=line.match(/^([\w-]+):\s*(.*)$/); if (!hit) continue; let [,key,value]=hit; value=value.trim(); if (value.startsWith('"')) { try { value=JSON.parse(value); } catch {} } else if (value.startsWith('[')) value=parseArray(value); else if (value.startsWith('{')) { try { value=JSON.parse(value); } catch {} } else if (value === 'true' || value === 'false') value=value === 'true'; data[key]=value; }
   return { data, body:match[2].trim() };
 }
 function markdown(data) {
@@ -33,9 +33,10 @@ function markdown(data) {
     `title: ${escapeYaml(data.title)}`, `type: ${data.type}`, data.date ? `date: ${data.date}` : '', data.location ? `location: ${escapeYaml(data.location)}` : '',
     `tags: ${list(data.tags)}`, `description: ${escapeYaml(data.description || data.story?.split('\n')[0] || data.title)}`,
     `related: ${list(data.related)}`, data.people?.length ? `people: ${list(data.people)}` : '', data.cover ? `cover: ${escapeYaml(data.cover)}` : '',
-    `status: ${data.status || 'past'}`, `featured: ${Boolean(data.featured)}`, `accent: ${accents[data.type] || 'sand'}`
+    `status: ${data.status || 'past'}`, `featured: ${Boolean(data.featured)}`, `accent: ${accents[data.type] || 'sand'}`,
+    data.presentation && Object.keys(data.presentation).length > 0 ? `presentation: ${JSON.stringify(data.presentation)}` : ''
   ].filter(Boolean).join('\n');
-  const image = data.cover ? `\n\n![${data.title}](${data.cover})` : '';
+  const image = '';
   return `---\n${front}\n---\n\n${data.story?.trim() || ''}${image}\n`;
 }
 async function entryFiles() { try { return (await walk(entriesDir)).filter(file=>file.endsWith('.md')); } catch { return []; } }
@@ -49,7 +50,11 @@ const server=http.createServer(async (req,res)=>{
     const url=new URL(req.url, 'http://localhost');
     if (req.method==='GET' && url.pathname==='/') return text(res,200,await fs.readFile(path.join(captureDir,'index.html'),'utf8'));
     if (req.method==='GET' && url.pathname==='/app.js') return text(res,200,await fs.readFile(path.join(captureDir,'app.js'),'utf8'),'text/javascript; charset=utf-8');
+    if (req.method==='GET' && url.pathname==='/blocknote-poc.js') return text(res,200,await fs.readFile(path.join(captureDir,'blocknote-poc.js'),'utf8'),'text/javascript; charset=utf-8');
+    if (req.method==='GET' && url.pathname==='/blocknote-poc.css') return text(res,200,await fs.readFile(path.join(captureDir,'blocknote-poc.css'),'utf8'),'text/css; charset=utf-8');
     if (req.method==='GET' && url.pathname==='/style.css') return text(res,200,await fs.readFile(path.join(captureDir,'style.css'),'utf8'),'text/css; charset=utf-8');
+    if (req.method==='GET' && url.pathname==='/global.css') return text(res,200,await fs.readFile(path.join(root,'src/styles/global.css'),'utf8'),'text/css; charset=utf-8');
+    if (req.method==='GET' && url.pathname==='/lib/entryTemplate.js') return text(res,200,await fs.readFile(path.join(root,'src/lib/entryTemplate.js'),'utf8'),'text/javascript; charset=utf-8');
     if (req.method==='GET' && url.pathname==='/api/entries') return json(res,200,await readEntries());
     if (req.method==='GET' && url.pathname.startsWith('/api/entry/')) { const id=decodeURIComponent(url.pathname.slice(11)); const found=(await readEntries(true)).find(entry=>entry.id===id); return found?json(res,200,found):json(res,404,{error:'Entry not found'}); }
     if (req.method==='POST' && url.pathname==='/api/entry') { const data=await body(req); if (!types.includes(data.type)||!data.title?.trim()) return json(res,400,{error:'Choose a type and give it a title.'}); const id=data.existingId || slugify(data.title); const file=await uniqueFile(id,data.existingId); await fs.mkdir(path.dirname(file),{recursive:true}); await fs.writeFile(file,markdown(data)); return json(res,200,{ok:true,id:path.relative(entriesDir,file).replace(/\.md$/,'').split(path.sep).join('/')}); }

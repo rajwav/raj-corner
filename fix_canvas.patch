@@ -1,0 +1,35 @@
+--- capture/app.js
++++ capture/app.js
+@@ -976,6 +976,8 @@
+   if (titleEl) {
+     titleEl.contentEditable = 'true';
+     titleEl.style.outline = 'none';
++    titleEl.dataset.placeholder = 'Untitled';
++    if (titleEl.innerText.trim() === 'Untitled' || !titleEl.innerText.trim()) titleEl.innerHTML = '';
+     titleEl.oninput = (e) => {
+       if (entryForm.elements.title) {
+         entryForm.elements.title.value = e.target.innerText.trim();
+@@ -987,7 +989,8 @@
+   if (descEl) {
+     descEl.contentEditable = 'true';
+     descEl.style.outline = 'none';
+-    descEl.dataset.placeholder = 'Optional brief summary...';
++    descEl.dataset.placeholder = 'Add a short description...';
++    if (!descEl.innerText.trim()) descEl.innerHTML = '';
+     descEl.oninput = (e) => {
+       if (entryForm.elements.description) {
+         entryForm.elements.description.value = e.target.innerText.trim();
+@@ -1018,8 +1021,9 @@
+     wrap.style.cssText = 'position:relative; margin-bottom:1em; outline:none; transition:box-shadow 0.2s; border-radius:4px;';
+     
+     let html = typeof marked !== 'undefined' ? marked.parse(block.raw) : block.raw;
++    if (!html.trim()) html = '';
+     
+     wrap.innerHTML = `
+       <div class="block-drag-handle" style="position:absolute; left:-40px; top:4px; display:flex; flex-direction:column; gap:4px; opacity:0; transition:opacity 0.2s;">
+         <div style="cursor:grab; color:var(--text-light); padding:4px; line-height:1;" title="Drag to move">≡</div>
+         <button type="button" onclick="deleteBlock(\$\{index\})" style="background:transparent; border:none; color:red; cursor:pointer; padding:4px; line-height:1; font-size:12px;" title="Delete Block">×</button>
+       </div>
+-      <div class="canvas-block-content" contenteditable="true" style="outline:none; min-height:1.5em;">\$\{html\}</div>
++      <div class="canvas-block-content" contenteditable="true" data-placeholder="Start writing..." style="outline:none; min-height:1.5em;">\$\{html\}</div>
+       <div class="canvas-block-add" style="position:absolute; left:50%; bottom:-16px; transform:translateX(-50%); opacity:0; transition:opacity 0.2s; background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:2px 8px; z-index:10; font-family:var(--mono); font-size:10px; display:flex; gap:4px; white-space:nowrap; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
