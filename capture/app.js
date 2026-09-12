@@ -36,6 +36,8 @@ document.getElementById('btn-settings')?.addEventListener('click', () => {
 const types = {memory:['A small thing worth keeping.','What do you want future-you to remember?'],travel:['A road, a day, a place.','Start with the part that surprised you.'],photo:['A frame with a story.','What happened around this photograph?'],car:['Why this one?','The reason it matters more than the specifications.'],music:['A song attached to a time.','What does this sound bring back?'],thought:['A thought before it disappears.','Write it down without trying to finish it.'],idea:['An unfinished idea.','What is the spark?'],experiment:['Something you tried.','What happened, or what are you trying next?'],place:['A place worth pinning.','Why does this place belong in your world?'],milestone:['A marker in time.','What changed?'],dream:['Something waiting in the distance.','Why does this matter to you?'],person:['Someone who mattered.','What do you want to remember about them?']};
 
 window.isDirty = false;
+// Per-image presentation metadata: url → { width: '50%', align: 'center' }
+window.imageMetadata = new Map();
 window.setDirty = function(dirty) {
   window.isDirty = dirty;
   const indicator = document.getElementById('dirty-indicator');
@@ -159,6 +161,7 @@ if (pList) {
 }
 function renderTypeButtons(){const box=$('#types');if(box){box.innerHTML=Object.entries(types).map(([id,[name]])=>`<button type="button" data-type="${id}">${name}</button>`).join('');box.querySelectorAll('button').forEach(button=>button.onclick=()=>newEntry(button.dataset.type));}}
 function initializeNewEntry(type){
+  window.imageMetadata = new Map(); // clear per-image metadata for fresh entry
   activeType=type;const form=$('#entry-form');form.reset();form.elements.existingId.value='';if(form.elements.description)form.elements.description.value='';form.elements.date.value=today();form.elements.cover.value='';if(form.elements.presentation)form.elements.presentation.value='{}';
   document.getElementById('type-select').value = type;
   document.getElementById('world-display').value = typeWorld[type] || 'Life';
@@ -200,6 +203,162 @@ function setupForm(type,data={}){ if (typeof previewBtn !== 'undefined' && previ
 async function upload(){const file=$('#image').files[0];if(!file)return;$('#image-status').textContent='Saving image locally…';const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file)});const result=await request('/api/image',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:file.name,dataUrl})});$('#entry-form').elements.cover.value=result.url;$('#image-status').textContent=`Attached: ${file.name}`; if(typeof previewPane!=='undefined' && !previewPane.hidden) updatePreview();
   if (typeof captureSnapshot === 'function') captureSnapshot('Uploaded cover');}
 $('#image').onchange=()=>upload().catch(error=>$('#image-status').textContent=error.message);
+
+// ─── Image Metadata Helpers ────────────────────────────────────────────────
+// Parse image metadata from markdown title fields back into window.imageMetadata.
+// Stored format in markdown: ![alt](url "w=50%,a=center")
+function loadImageMetadataFromMarkdown(md) {
+  window.imageMetadata = new Map();
+  if (!md) return;
+  const re = /!\[[^\]]*\]\(([^)\s"']+)(?:\s+["']([^"']*)["'])?\)/g;
+  let m;
+  while ((m = re.exec(md)) !== null) {
+    const url = m[1];
+    const title = m[2] || '';
+    const wMatch = title.match(/w=([^,]+)/);
+    const aMatch = title.match(/a=([^,]+)/);
+    if (wMatch || aMatch) {
+      window.imageMetadata.set(url, {
+        width: wMatch ? wMatch[1] : '100%',
+        align: aMatch ? aMatch[1] : 'center'
+      });
+    }
+  }
+}
+
+// Inject per-image metadata into BlockNote markdown as image title fields.
+// Input:  ![alt](url)
+// Output: ![alt](url "w=50%,a=center")
+function injectImageMetadata(md) {
+  if (!md || window.imageMetadata.size === 0) return md;
+  return md.replace(/!\[([^\]]*)\]\(([^)\s"']+)(?:\s+["'][^"']*["'])?\)/g, (match, alt, url) => {
+    const meta = window.imageMetadata.get(url);
+    if (!meta) return match;
+    const parts = [];
+    if (meta.width && meta.width !== '100%') parts.push('w=' + meta.width);
+    if (meta.align && meta.align !== 'center') parts.push('a=' + meta.align);
+    if (parts.length === 0) return match;
+    return '![' + alt + '](' + url + ' "' + parts.join(',') + '")';
+  });
+}
+
+// Inject resize + alignment controls as overlays on images in the BlockNote container.
+// Uses MutationObserver so it works even after BlockNote renders asynchronously.
+let _imgResizeObserver = null;
+function setupImageResizeUI(containerId) {
+  if (_imgResizeObserver) { _imgResizeObserver.disconnect(); _imgResizeObserver = null; }
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  function applyMetaToImg(img, meta) {
+    img.style.width = meta.width || '100%';
+    img.style.maxWidth = '100%';
+    img.style.height = 'auto';
+    img.style.display = 'block';
+    if (img._rcWrapper) {
+      img._rcWrapper.style.textAlign = meta.align || 'center';
+    }
+  }
+
+  function processImage(img) {
+    if (img.dataset.rcManaged) return;
+    // Only manage images that are uploads (not BlockNote UI icons)
+    const src = img.getAttribute('src') || '';
+    if (!src.startsWith('/uploads/') && !src.startsWith('/images/')) return;
+    img.dataset.rcManaged = '1';
+
+    const meta = window.imageMetadata.get(src) || { width: '100%', align: 'center' };
+
+    // Wrap image for positioning
+    const wrapper = document.createElement('div');
+    wrapper.className = 'rc-img-wrapper';
+    wrapper.style.cssText = 'position:relative;text-align:' + (meta.align || 'center') + ';margin:8px 0;';
+    img._rcWrapper = wrapper;
+    if (img.parentNode) {
+      img.parentNode.insertBefore(wrapper, img);
+      wrapper.appendChild(img);
+    }
+
+    applyMetaToImg(img, meta);
+
+    // Build controls overlay
+    const controls = document.createElement('div');
+    controls.className = 'rc-img-controls';
+    const widthPct = parseInt(meta.width) || 100;
+    controls.innerHTML =
+      '<span style="opacity:.7">W:</span>' +
+      '<input type="range" min="20" max="100" value="' + widthPct + '" class="rc-width-slider" style="width:80px;cursor:pointer;accent-color:#fff;">' +
+      '<span class="rc-width-label" style="min-width:32px">' + widthPct + '%</span>' +
+      '<span style="opacity:.4;margin:0 2px">|</span>' +
+      ['left','center','right'].map(a =>
+        '<button type="button" class="rc-align-btn" data-align="' + a + '" title="' + a +
+        '" style="background:none;border:none;color:#fff;cursor:pointer;padding:1px 4px;font-size:14px;opacity:' +
+        (a === (meta.align || 'center') ? '1' : '0.4') + '">' +
+        ({left:'⇐',center:'⇌',right:'⇒'}[a]) + '</button>'
+      ).join('');
+
+    controls.style.cssText = [
+      'display:flex;gap:6px;align-items:center',
+      'padding:4px 8px',
+      'background:rgba(0,0,0,0.78)',
+      'color:#fff',
+      'border-radius:4px',
+      'font-size:11px;font-family:monospace',
+      'position:absolute;top:6px;left:50%;transform:translateX(-50%)',
+      'z-index:200;white-space:nowrap',
+      'opacity:0;transition:opacity 0.15s',
+      'pointer-events:none'
+    ].join(';');
+
+    wrapper.appendChild(controls);
+    wrapper.addEventListener('mouseenter', () => { controls.style.opacity='1'; controls.style.pointerEvents='auto'; });
+    wrapper.addEventListener('mouseleave', () => { controls.style.opacity='0'; controls.style.pointerEvents='none'; });
+
+    // Width slider
+    const slider = controls.querySelector('.rc-width-slider');
+    const label  = controls.querySelector('.rc-width-label');
+    slider.addEventListener('input', () => {
+      const w = slider.value + '%';
+      img.style.width = w;
+      label.textContent = slider.value + '%';
+      const m2 = window.imageMetadata.get(src) || { align: 'center' };
+      m2.width = w;
+      window.imageMetadata.set(src, m2);
+      window.markDirty();
+    });
+
+    // Alignment buttons
+    controls.querySelectorAll('.rc-align-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const a = btn.dataset.align;
+        wrapper.style.textAlign = a;
+        controls.querySelectorAll('.rc-align-btn').forEach(b => b.style.opacity = b.dataset.align === a ? '1' : '0.4');
+        const m2 = window.imageMetadata.get(src) || { width: '100%' };
+        m2.align = a;
+        window.imageMetadata.set(src, m2);
+        window.markDirty();
+      });
+    });
+  }
+
+  // Process already-rendered images
+  container.querySelectorAll('img').forEach(processImage);
+
+  // Watch for images added by BlockNote async rendering
+  _imgResizeObserver = new MutationObserver(mutations => {
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType !== 1) continue;
+        if (node.tagName === 'IMG') processImage(node);
+        if (node.querySelectorAll) node.querySelectorAll('img').forEach(processImage);
+      }
+    }
+  });
+  _imgResizeObserver.observe(container, { childList: true, subtree: true });
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function collectCurrentEntryState() {
   const form = document.getElementById('entry-form');
   if (!form) return {};
@@ -210,6 +369,8 @@ async function collectCurrentEntryState() {
   } else {
     blocknoteMd = form.elements.story ? form.elements.story.value.trim() : '';
   }
+  // Inject per-image width/alignment metadata into the markdown title fields
+  blocknoteMd = injectImageMetadata(blocknoteMd);
 
   const tags = [];
   form.querySelectorAll('input[name="tags"]:checked').forEach(x => tags.push(x.value));
@@ -299,13 +460,32 @@ async function saveCurrentEntry() {
   } catch(error) {
     console.error('SAVE ERROR:', error);
     let errorMsg = error.message;
-    try {
-      const parsed = JSON.parse(error.message.replace(/^Save failed \(\d+\): /, ''));
-      if (parsed.error) errorMsg = parsed.error;
-    } catch(e) {}
+    
+    // Distinguish Network Error vs HTTP Error
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      errorMsg = 'Cannot reach Capture server';
+    } else {
+      try {
+        const parsed = JSON.parse(error.message.replace(/^Save failed \(\d+\): /, ''));
+        if (parsed.error) errorMsg = parsed.error;
+      } catch(e) {}
+    }
     
     if (indicator) { 
-      indicator.textContent = '⚠ Save failed: ' + errorMsg; 
+      if (errorMsg === 'Cannot reach Capture server') {
+        indicator.textContent = '⚠ Save failed: Cannot reach Capture server';
+      } else if (errorMsg.startsWith('Save failed')) {
+        indicator.textContent = '⚠ ' + errorMsg;
+      } else {
+        // If it was already formatted as an HTTP error, we don't prepend again. 
+        // Our manually thrown HTTP errors look like "Save failed (500): ..." 
+        // which starts with "Save failed".
+        if (error.message.startsWith('Save failed')) {
+          indicator.textContent = '⚠ ' + error.message;
+        } else {
+          indicator.textContent = '⚠ Save failed: ' + errorMsg;
+        }
+      }
       indicator.style.color = 'var(--text-error)'; 
     }
     if (message) message.textContent = errorMsg;
@@ -319,7 +499,9 @@ async function editEntry(id, mode = 'setup'){const entry=await request(`/api/ent
   const form=$('#entry-form');form.hidden=false;form.elements.existingId.value=id;form.elements.title.value=entry.data.title||'';form.elements.date.value=(entry.data.date||'').slice(0,10);form.elements.location.value=entry.data.location||'';form.elements.story.value=entry.story||'';if(form.elements.description)form.elements.description.value=entry.data.description||'';form.elements.people.value=(entry.data.people||[]).join(', ');form.elements.cover.value=entry.data.cover||'';if(form.elements.presentation) {
   form.elements.presentation.value=JSON.stringify(entry.data.presentation||{});
   layoutSelect.value = (entry.data.presentation && entry.data.presentation.layout && entry.data.presentation.layout.mode) ? entry.data.presentation.layout.mode : 'default';
-}form.elements.newTag.value='';$('#image-status').textContent=entry.data.cover?`Attached: ${entry.data.cover}`:'Optional. It will be saved locally with the project.';setupForm(activeType,{...entry.data,id});$('#delete').hidden=false;document.querySelectorAll('.types button').forEach(x=>x.classList.toggle('selected',x.dataset.type===activeType)); window.USE_BLOCKNOTE_POC = true; document.getElementById('type-select').value = activeType; document.getElementById('world-display').value = typeWorld[activeType] || 'Life'; 
+}form.elements.newTag.value='';$('#image-status').textContent=entry.data.cover?`Attached: ${entry.data.cover}`:'Optional. It will be saved locally with the project.';setupForm(activeType,{...entry.data,id});$('#delete').hidden=false;document.querySelectorAll('.types button').forEach(x=>x.classList.toggle('selected',x.dataset.type===activeType)); window.USE_BLOCKNOTE_POC = true; document.getElementById('type-select').value = activeType; document.getElementById('world-display').value = typeWorld[activeType] || 'Life';
+  // Load per-image metadata from the saved markdown so resize UI initializes correctly
+  loadImageMetadataFromMarkdown(entry.story || '');
   if (window.BlockNotePOCModule && typeof window.BlockNotePOCModule.unmountBlockNotePOC === 'function') {
       window.BlockNotePOCModule.unmountBlockNotePOC('blocknote-container');
   }
@@ -1264,6 +1446,8 @@ function initCanvasEditor() {
         window.BlockNotePOCModule = module;
         const markdown = document.forms['entry-form'].elements.story.value || '';
         module.mountBlockNotePOC('blocknote-container', markdown);
+        // Set up image resize/alignment overlay (MutationObserver catches async-rendered images)
+        setTimeout(() => setupImageResizeUI('blocknote-container'), 200);
       });
       // Ensure CSS is loaded
       if (!document.getElementById('blocknote-css')) {

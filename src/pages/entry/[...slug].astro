@@ -118,34 +118,81 @@ if (entry.data.type === 'person') {
 <div set:html={renderContinuation(curatedThreads)} />
 
 <script>
-  // Promote markdown image titles to figcaptions in the preview
-  document.querySelectorAll('.prose img').forEach((el) => {
-    const img = el; // let JS duck-typing handle it in browser, but we'll use getAttribute for TS
-    if (!img.closest('figure')) {
-      const src = img.getAttribute('src');
-      const title = img.getAttribute('title');
-      if (!title && !(src && src.includes('#'))) return;
-      
-      const fig = document.createElement('figure');
-      fig.className = 'story-image-figure';
-      
-      if (src && src.includes('#')) {
-        const hash = src.split('#')[1];
-        const params = new URLSearchParams(hash);
-        if (params.get('s')) fig.classList.add('s-' + params.get('s'));
-        if (params.get('a')) fig.classList.add('a-' + params.get('a'));
-        if (params.get('t')) fig.classList.add('t-' + params.get('t'));
-      }
-      
-      if (img.parentNode) {
-        img.parentNode.insertBefore(fig, img);
-        fig.appendChild(img);
-        if (title) {
-          const cap = document.createElement('figcaption');
-          cap.textContent = title;
-          fig.appendChild(cap);
-        }
-      }
+  // ─── Public entry page: media rendering ────────────────────────────────────
+
+  // 1. VIDEO / AUDIO — ensure controls and responsive sizing
+  document.querySelectorAll<HTMLVideoElement>('.prose video').forEach((vid) => {
+    if (!vid.hasAttribute('controls')) vid.setAttribute('controls', '');
+    if (!vid.hasAttribute('preload')) vid.setAttribute('preload', 'metadata');
+    vid.style.maxWidth = '100%';
+    vid.style.height = 'auto';
+    vid.style.display = 'block';
+    vid.style.margin = '1.5em 0';
+    // If src is on the element directly (not via <source>), ensure a <source> child exists
+    const src = vid.getAttribute('src');
+    if (src && !vid.querySelector('source')) {
+      const s = document.createElement('source');
+      s.src = src;
+      vid.removeAttribute('src');
+      vid.appendChild(s);
+    }
+  });
+
+  document.querySelectorAll<HTMLAudioElement>('.prose audio').forEach((aud) => {
+    if (!aud.hasAttribute('controls')) aud.setAttribute('controls', '');
+    aud.style.maxWidth = '100%';
+    aud.style.display = 'block';
+    aud.style.margin = '1.5em 0';
+  });
+
+  // 2. IMAGES — read title="w=50%,a=center" and apply width + alignment
+  document.querySelectorAll<HTMLImageElement>('.prose img').forEach((img) => {
+    if (img.closest('figure')) return; // already wrapped
+
+    const title = img.getAttribute('title') || '';
+
+    // Parse metadata from title field: "w=50%,a=center" or "w=35%,a=left"
+    const wMatch = title.match(/w=([^,\s]+)/);
+    const aMatch = title.match(/a=([^,\s]+)/);
+
+    // Only caption text = title content without the metadata tokens
+    const captionText = title
+      .replace(/w=[^,\s]+,?\s*/g, '')
+      .replace(/a=[^,\s]+,?\s*/g, '')
+      .trim();
+
+    const hasMetadata = wMatch || aMatch;
+    const hasCaption  = captionText.length > 0;
+
+    if (!hasMetadata && !hasCaption) return; // plain image, leave it alone
+
+    const fig = document.createElement('figure');
+    fig.className = 'story-image-figure';
+
+    const width = wMatch ? wMatch[1] : null;
+    const align = aMatch ? aMatch[1] : 'center';
+
+    // Apply width inline on the img itself
+    if (width) {
+      img.style.width = width;
+      img.style.maxWidth = '100%';
+      img.style.height = 'auto';
+    }
+
+    // Apply alignment via wrapper text-align (works for left/center/right)
+    const alignMap: Record<string, string> = { left: 'left', center: 'center', right: 'right' };
+    fig.style.textAlign = alignMap[align] ?? 'center';
+    fig.style.margin = '1.5em 0';
+
+    if (img.parentNode) {
+      img.parentNode.insertBefore(fig, img);
+      fig.appendChild(img);
+    }
+
+    if (hasCaption) {
+      const cap = document.createElement('figcaption');
+      cap.textContent = captionText;
+      fig.appendChild(cap);
     }
   });
 </script>
