@@ -1,21 +1,118 @@
 import { renderEntryHeader, renderEntryCover, renderEntryTags, renderPersonTraces, renderContinuation, getPresentationClasses } from '/lib/entryTemplate.js';
 const $ = (selector) => document.querySelector(selector);
+const typeWorld = {
+  memory:'Life', person:'Life', milestone:'Life', dream:'Life', goal:'Life', note:'Life',
+  travel:'Travel', place:'Travel', photo:'Travel', trip:'Travel',
+  car:'Interests', music:'Interests', book:'Interests', movie:'Interests', anime:'Interests', space:'Interests', chess:'Interests', collection:'Interests',
+  experiment:'Making', project:'Making', idea:'Making', thought:'Making',
+};
+
+window.goToSetup = async function() {
+  if (window.USE_BLOCKNOTE_POC && window.BlockNotePOCModule) {
+    const md = await window.BlockNotePOCModule.getBlockNoteMarkdown();
+    document.forms['entry-form'].elements.story.value = md;
+  }
+  const typeStr = document.getElementById('type-select').value;
+  document.getElementById('world-display').value = typeWorld[typeStr] || 'Life';
+  
+  const id = document.forms['entry-form'].elements.existingId.value || 'new';
+  location.hash = '/setup/' + id;
+};
+window.goToEditor = function() {
+  const form = document.getElementById('entry-form');
+  const id = form ? (form.elements.existingId.value || 'new') : 'new';
+  location.hash = '/editor/' + id;
+};
+
+document.getElementById('btn-continue-editor')?.addEventListener('click', window.goToEditor);
+document.getElementById('btn-back-setup')?.addEventListener('click', window.goToSetup);
+document.getElementById('type-select')?.addEventListener('change', (e) => {
+  document.getElementById('world-display').value = typeWorld[e.target.value] || 'Life';
+});
+document.getElementById('btn-settings')?.addEventListener('click', () => {
+  const panel = document.getElementById('page-settings-panel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+});
 const types = {memory:['A small thing worth keeping.','What do you want future-you to remember?'],travel:['A road, a day, a place.','Start with the part that surprised you.'],photo:['A frame with a story.','What happened around this photograph?'],car:['Why this one?','The reason it matters more than the specifications.'],music:['A song attached to a time.','What does this sound bring back?'],thought:['A thought before it disappears.','Write it down without trying to finish it.'],idea:['An unfinished idea.','What is the spark?'],experiment:['Something you tried.','What happened, or what are you trying next?'],place:['A place worth pinning.','Why does this place belong in your world?'],milestone:['A marker in time.','What changed?'],dream:['Something waiting in the distance.','Why does this matter to you?'],person:['Someone who mattered.','What do you want to remember about them?']};
-let entries=[]; let activeType=''; let storyBlocks = [];
+
+window.isDirty = false;
+window.setDirty = function(dirty) {
+  window.isDirty = dirty;
+  const indicator = document.getElementById('dirty-indicator');
+  if (indicator) {
+    indicator.textContent = dirty ? '● Unsaved' : 'Saved';
+    indicator.style.color = dirty ? 'var(--text)' : 'var(--text-light)';
+  }
+};
+window.markDirty = function() { window.setDirty(true); };
+
+window.addEventListener('beforeunload', (e) => {
+  if (window.isDirty) {
+    e.preventDefault();
+    e.returnValue = 'You have unsaved changes.';
+  }
+});
+
+// Intercept form inputs for dirty
+document.addEventListener('input', (e) => {
+  if (e.target.closest('#entry-form') || e.target.closest('#page-settings-panel')) {
+    window.markDirty();
+  }
+});
+
+let entries=[];
+
+// The hash is the only navigation source of truth. Keeping this router small
+// prevents an old button handler or a partial editor mount from stranding the UI.
+async function route() {
+  const hash = location.hash.slice(1) || '/';
+  const form = document.getElementById('entry-form');
+  try {
+    if (hash === '/setup/new') {
+      if (!window.USE_BLOCKNOTE_POC) initializeNewEntry('memory');
+      show('capture');
+      return;
+    }
+    if (hash === '/editor/new') {
+      if (!window.USE_BLOCKNOTE_POC) initializeNewEntry('memory');
+      show('preview-pane');
+      updatePreview();
+      return;
+    }
+    const match = hash.match(/^\/(setup|editor)\/([^/]+)$/);
+    if (match) {
+      const [, mode, id] = match;
+      if (form.elements.existingId.value !== id) await editEntry(id, mode);
+      else {
+        show(mode === 'editor' ? 'preview-pane' : 'capture');
+        if (mode === 'editor') updatePreview();
+      }
+      return;
+    }
+    if (hash === '/entries') return show('entries');
+    if (hash === '/currently') return show('currently');
+    if (hash === '/life-list') return show('life-list');
+    show('home');
+  } catch (error) {
+    console.error('Capture route failed:', error);
+    const message = document.getElementById('message');
+    if (message) message.textContent = `Could not open this page: ${error.message}`;
+    show('home');
+  }
+}
+window.onhashchange = route;
+ let activeType=''; let storyBlocks = [];
 const today=()=>new Date().toISOString().slice(0,10);
 function show(id){
-  if (id === 'capture') {
-    // Legacy redirect to visual canvas for 'New Entry'
-    id = 'preview-pane';
-    if (typeof newEntry === 'function' && !$('#entry-form').elements.existingId.value) {
-      newEntry('memory'); // Default type if opening directly
-    }
-  }
-  document.querySelectorAll('.panel').forEach(x=>x.hidden=x.id!==id);
+  document.querySelectorAll('.panel').forEach(x=>{
+    x.hidden=x.id!==id;
+    if (x.id === 'capture') x.style.display = (id === 'capture') ? 'block' : 'none';
+    if (x.id === 'preview-pane') x.style.display = (id === 'preview-pane') ? 'flex' : 'none';
+  });
   const header = document.querySelector('header');
   const navTabs = document.querySelector('nav.tabs');
   const homeSec = document.getElementById('home');
-  if (id === 'preview-pane') {
+  if (id === 'preview-pane' || id === 'capture') {
     if (header) header.style.display = 'none';
     if (navTabs) navTabs.style.display = 'none';
     if (homeSec) homeSec.style.display = 'none';
@@ -29,62 +126,205 @@ function show(id){
   if(id==='entries')renderEntryList();
   if(id==='currently')loadCurrently();
   if(id==='life-list')loadLife();
-  location.hash=id;
+  
 }
-document.querySelectorAll('[data-go]').forEach(button=>button.onclick=()=>show(button.dataset.go));
+document.querySelectorAll('[data-go]').forEach(button => {
+  button.onclick = (e) => {
+    const go = button.dataset.go;
+    if (window.isDirty && (go !== 'capture' && go !== 'preview-pane')) {
+      if (!confirm("You have unsaved changes.\n\n[ Stay editing ] or [ Leave without saving ]? Press OK to leave.")) {
+        e.preventDefault();
+        return;
+      }
+      window.setDirty(false);
+    }
+    
+    if (go === 'capture') {
+       const id = document.getElementById('entry-form').elements.existingId.value || 'new';
+       location.hash = '/setup/' + id;
+    } else if (go === 'entries') {
+       location.hash = '/entries';
+    } else {
+       location.hash = '/' + go;
+    }
+  };
+});
 function esc(v=''){return String(v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-async function request(url,options={}){const res=await fetch(url,options);const data=await res.json();if(!res.ok)throw new Error(data.error||'Could not save.');return data;}
+async function request(url,options={}){const res=await fetch(url,options);let data={};try{data=await res.json();}catch(e){if(!res.ok)throw new Error(`HTTP ${res.status}: Could not parse response.`);}if(!res.ok){console.error(`HTTP ${res.status} Error:`, data);throw new Error(`HTTP ${res.status}: `+(data.error||'Could not save.'));}return data;}
 async function loadEntries(){entries=await request('/api/entries');renderTypeButtons();renderEntryList();
 const pList = document.getElementById('people-suggestions');
 if (pList) {
   pList.innerHTML = entries.filter(e => e.type === 'person').map(e => `<option value="${esc(e.title)}">`).join('');
 }
 }
-function renderTypeButtons(){const box=$('#types');box.innerHTML=Object.entries(types).map(([id,[name]])=>`<button type="button" data-type="${id}">${name}</button>`).join('');box.querySelectorAll('button').forEach(button=>button.onclick=()=>newEntry(button.dataset.type));}
-function newEntry(type){
-  show('preview-pane');activeType=type;const form=$('#entry-form');form.reset();form.elements.existingId.value='';if(form.elements.description)form.elements.description.value='';form.elements.date.value=today();form.elements.cover.value='';if(form.elements.presentation)form.elements.presentation.value='{}';
-if(layoutSelect) layoutSelect.value = 'default';$('#image-status').textContent='Optional. It will be saved locally with the project.';$('#delete').hidden=true;setupForm(type);form.hidden=false;document.querySelectorAll('.types button').forEach(x=>x.classList.toggle('selected',x.dataset.type===type));form.scrollIntoView({behavior:'smooth',block:'start'}); updatePreview(); setTimeout(() => { historyStack = []; historyIndex = -1; captureSnapshot('New entry'); savedStateStr = JSON.stringify(historyStack[0].state); updateHistoryUI(); }, 50); }
-function setupForm(type,data={}){ if (typeof previewBtn !== 'undefined') previewBtn.hidden = false; 
+function renderTypeButtons(){const box=$('#types');if(box){box.innerHTML=Object.entries(types).map(([id,[name]])=>`<button type="button" data-type="${id}">${name}</button>`).join('');box.querySelectorAll('button').forEach(button=>button.onclick=()=>newEntry(button.dataset.type));}}
+function initializeNewEntry(type){
+  activeType=type;const form=$('#entry-form');form.reset();form.elements.existingId.value='';if(form.elements.description)form.elements.description.value='';form.elements.date.value=today();form.elements.cover.value='';if(form.elements.presentation)form.elements.presentation.value='{}';
+  document.getElementById('type-select').value = type;
+  document.getElementById('world-display').value = typeWorld[type] || 'Life';
+  window.USE_BLOCKNOTE_POC = true;
+  $('#image-status').textContent='Optional. It will be saved locally with the project.';$('#delete').hidden=true;setupForm(type);form.hidden=false;document.querySelectorAll('.types button').forEach(x=>x.classList.toggle('selected',x.dataset.type===type));
+  setTimeout(() => { historyStack = []; historyIndex = -1; captureSnapshot('New entry'); savedStateStr = JSON.stringify(historyStack[0].state); updateHistoryUI(); }, 50);
+}
+function newEntry(type) {
+  initializeNewEntry(type);
+  location.hash = '/setup/new';
+}
+function setupForm(type,data={}){ if (typeof previewBtn !== 'undefined' && previewBtn) previewBtn.hidden = false; 
   const [heading,prompt]=types[type];
-  $('#type-label').textContent=type;
-  $('#form-title').textContent=heading;
+  if ($('#type-label')) $('#type-label').textContent=type;
+  if ($('#form-title')) $('#form-title').textContent=heading;
   
   if (type === 'person') {
-    $('#title-field span').textContent = 'NAME';
+    if ($('#title-field span')) $('#title-field span').textContent = 'NAME';
     $('#entry-form').elements.title.placeholder = 'Who is this?';
-    $('#location-field span').textContent = 'PLACE';
-    $('#entry-form').elements.location.placeholder = 'Where are they connected to this memory?';
-    $('#story-field span').textContent = 'WHAT DO YOU WANT TO REMEMBER ABOUT THEM?';
-    $('#story-field textarea').placeholder = 'A memory, a story, or why they matter to you...';
+    if ($('#location-field span')) $('#location-field span').textContent = 'PLACE';
+    if ($('#entry-form').elements.location) $('#entry-form').elements.location.placeholder = 'Where are they connected to this memory?';
+    if ($('#story-field span')) $('#story-field span').textContent = 'WHAT DO YOU WANT TO REMEMBER ABOUT THEM?';
+    if ($('#story-field textarea')) $('#story-field textarea').placeholder = 'A memory, a story, or why they matter to you...';
   } else {
-    $('#title-field span').textContent = 'Title';
+    if ($('#title-field span')) $('#title-field span').textContent = 'Title';
     $('#entry-form').elements.title.placeholder = 'That evening in Puri';
-    $('#location-field span').textContent = 'Place';
-    $('#entry-form').elements.location.placeholder = 'Puri';
-    $('#story-field span').textContent = 'Story';
-    $('#story-field textarea').placeholder = prompt;
+    if ($('#location-field span')) $('#location-field span').textContent = 'Place';
+    if ($('#entry-form').elements.location) $('#entry-form').elements.location.placeholder = 'Puri';
+    if ($('#story-field span')) $('#story-field span').textContent = 'Story';
+    if ($('#story-field textarea')) $('#story-field textarea').placeholder = prompt;
   }
   
-  $('#location-field').hidden=type==='car'||type==='music'||type==='thought'||type==='idea'||type==='experiment';
+  if ($('#location-field')) $('#location-field').hidden=type==='car'||type==='music'||type==='thought'||type==='idea'||type==='experiment';
   
   $('#tag-options').innerHTML=[...new Set(entries.flatMap(e=>e.tags||[]))].sort().map(tag=>`<label><input type="checkbox" name="tags" value="${esc(tag)}" ${(data.tags||[]).includes(tag)?'checked':''}>${esc(tag)}</label>`).join('')||'<small>No tags yet—add one below.</small>';
   $('#related-options').innerHTML=entries.filter(e=>e.id!==data.id).map(e=>`<label><input type="checkbox" name="related" value="${esc(e.id)}" ${(data.related||[]).includes(e.id)?'checked':''}>${esc(e.title)}</label>`).join('')||'<small>No other entries yet.</small>';
 }
-function formData(){const form=$('#entry-form');return {existingId:form.elements.existingId.value,type:activeType,title:form.elements.title.value.trim() || 'Untitled',date:form.elements.date.value,location:form.elements.location.value.trim(),story:form.elements.story.value.trim(),description:form.elements.description?form.elements.description.value.trim():'',tags:[...form.querySelectorAll('input[name="tags"]:checked')].map(x=>x.value).concat(form.elements.newTag.value.trim()?[form.elements.newTag.value.trim().toLowerCase().replace(/\s+/g,'-')]:[]),related:[...form.querySelectorAll('input[name="related"]:checked')].map(x=>x.value),people:form.elements.people.value.split(',').map(x=>x.trim()).filter(Boolean),cover:form.elements.cover.value, presentation: form.elements.presentation ? JSON.parse(form.elements.presentation.value || '{}') : {} };}
+
 async function upload(){const file=$('#image').files[0];if(!file)return;$('#image-status').textContent='Saving image locally…';const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file)});const result=await request('/api/image',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:file.name,dataUrl})});$('#entry-form').elements.cover.value=result.url;$('#image-status').textContent=`Attached: ${file.name}`; if(typeof previewPane!=='undefined' && !previewPane.hidden) updatePreview();
   if (typeof captureSnapshot === 'function') captureSnapshot('Uploaded cover');}
 $('#image').onchange=()=>upload().catch(error=>$('#image-status').textContent=error.message);
-$('#entry-form').onsubmit=async(event)=>{event.preventDefault();const message=$('#message');message.textContent='Saving…';try{
-    clearTimeout(typingTimer);
-    captureSnapshot('Saved state (auto-flush)');
-    const saved=await request('/api/entry',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(formData())});message.textContent='Saved. It is now part of your archive.';await loadEntries();$('#entry-form').elements.existingId.value=saved.id;$('#delete').hidden=false;}catch(error){message.textContent=error.message}};
-$('#cancel').onclick=()=>{$('#entry-form').hidden=true;document.querySelectorAll('.types button').forEach(x=>x.classList.remove('selected'));};
+async function collectCurrentEntryState() {
+  const form = document.getElementById('entry-form');
+  if (!form) return {};
+  
+  let blocknoteMd = '';
+  if (window.USE_BLOCKNOTE_POC && window.BlockNotePOCModule) {
+    blocknoteMd = await window.BlockNotePOCModule.getBlockNoteMarkdown();
+  } else {
+    blocknoteMd = form.elements.story ? form.elements.story.value.trim() : '';
+  }
+
+  const tags = [];
+  form.querySelectorAll('input[name="tags"]:checked').forEach(x => tags.push(x.value));
+  const newTagStr = form.elements.newTag ? form.elements.newTag.value.trim() : '';
+  if (newTagStr) {
+    tags.push(newTagStr.toLowerCase().replace(/\s+/g, '-'));
+  }
+
+  const related = [];
+  form.querySelectorAll('input[name="related"]:checked').forEach(x => related.push(x.value));
+
+  const peopleStr = form.elements.people ? form.elements.people.value : '';
+  const people = peopleStr.split(',').map(x => x.trim()).filter(Boolean);
+
+  let presentation = {};
+  if (form.elements.presentation) {
+    try {
+      presentation = JSON.parse(form.elements.presentation.value || '{}');
+    } catch(e) {}
+  }
+
+  return {
+    existingId: form.elements.existingId ? form.elements.existingId.value : '',
+    type: typeof activeType !== 'undefined' ? activeType : 'memory',
+    title: form.elements.title ? form.elements.title.value.trim() : '',
+    date: form.elements.date ? form.elements.date.value : '',
+    location: form.elements.location ? form.elements.location.value.trim() : '',
+    description: form.elements.description ? form.elements.description.value.trim() : '',
+    cover: form.elements.cover ? form.elements.cover.value : '',
+    tags,
+    related,
+    people,
+    presentation,
+    story: blocknoteMd
+  };
+}
+
+async function saveCurrentEntry() {
+  const indicator = document.getElementById('dirty-indicator');
+  const message = document.getElementById('message');
+  
+  if (indicator) indicator.textContent = 'Saving…';
+  if (message) message.textContent = 'Saving…';
+
+  try {
+    if (window.USE_BLOCKNOTE_POC && (!window.BlockNotePOCModule || !window.BlockNotePOCModule.isBlockNoteReady())) {
+      throw new Error('Editor is still loading. Please wait a moment and save again.');
+    }
+    const payload = await collectCurrentEntryState();
+    if (!payload.title) throw new Error('Add a title before saving.');
+    
+    if (typeof typingTimer !== 'undefined') clearTimeout(typingTimer);
+    if (typeof captureSnapshot === 'function') captureSnapshot('Saved state (auto-flush)');
+    
+    const response = await fetch('/api/entry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Save failed (${response.status}): ${text}`);
+    }
+
+    const res = await response.json();
+    
+    if (typeof window.setDirty === 'function') window.setDirty(false);
+    if (indicator) { 
+      indicator.textContent = '✓ Saved just now'; 
+      indicator.style.color = 'var(--text-light)'; 
+    }
+    if (message) message.textContent = 'Saved. It is now part of your archive.';
+    if (typeof loadEntries === 'function') await loadEntries();
+    
+    const form = document.getElementById('entry-form');
+    if (form && form.elements.existingId) {
+      form.elements.existingId.value = res.id;
+    }
+    
+    const deleteBtn = document.getElementById('delete');
+    if (deleteBtn) deleteBtn.hidden = false;
+    
+    if (location.hash === '#/setup/new') history.replaceState(null, '', '#/setup/' + res.id);
+    if (location.hash === '#/editor/new') history.replaceState(null, '', '#/editor/' + res.id);
+    
+  } catch(error) {
+    console.error('SAVE ERROR:', error);
+    let errorMsg = error.message;
+    try {
+      const parsed = JSON.parse(error.message.replace(/^Save failed \(\d+\): /, ''));
+      if (parsed.error) errorMsg = parsed.error;
+    } catch(e) {}
+    
+    if (indicator) { 
+      indicator.textContent = '⚠ Save failed: ' + errorMsg; 
+      indicator.style.color = 'var(--text-error)'; 
+    }
+    if (message) message.textContent = errorMsg;
+  }
+}
+
+$('#cancel').onclick=()=>{show('entries');document.querySelectorAll('.types button').forEach(x=>x.classList.remove('selected'));};
 $('#delete').onclick=async()=>{const id=$('#entry-form').elements.existingId.value;if(!id)return;if(!confirm('Move this entry to the local .trash folder? You can restore it manually if needed.'))return;try{await request(`/api/entry/${encodeURIComponent(id)}`,{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({confirm:true})});$('#entry-form').hidden=true;await loadEntries();show('entries');}catch(error){$('#message').textContent=error.message}};
 function renderEntryList(){const box=$('#entry-list');box.innerHTML=entries.sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(e=>`<button data-id="${esc(e.id)}"><span>${esc(e.type)}</span><strong>${esc(e.title)}</strong><small>${esc(e.location||e.date||'undated')}</small><b>↗</b></button>`).join('')||'<p>Nothing saved yet. Capture the first thing.</p>';box.querySelectorAll('button').forEach(button=>button.onclick=()=>editEntry(button.dataset.id));}
-async function editEntry(id){const entry=await request(`/api/entry/${encodeURIComponent(id)}`);show('preview-pane');activeType=entry.data.type;const form=$('#entry-form');form.hidden=false;form.elements.existingId.value=id;form.elements.title.value=entry.data.title||'';form.elements.date.value=(entry.data.date||'').slice(0,10);form.elements.location.value=entry.data.location||'';form.elements.story.value=entry.story||'';if(form.elements.description)form.elements.description.value=entry.data.description||'';form.elements.people.value=(entry.data.people||[]).join(', ');form.elements.cover.value=entry.data.cover||'';if(form.elements.presentation) {
+async function editEntry(id, mode = 'setup'){const entry=await request(`/api/entry/${encodeURIComponent(id)}`);activeType=entry.data.type;
+  const form=$('#entry-form');form.hidden=false;form.elements.existingId.value=id;form.elements.title.value=entry.data.title||'';form.elements.date.value=(entry.data.date||'').slice(0,10);form.elements.location.value=entry.data.location||'';form.elements.story.value=entry.story||'';if(form.elements.description)form.elements.description.value=entry.data.description||'';form.elements.people.value=(entry.data.people||[]).join(', ');form.elements.cover.value=entry.data.cover||'';if(form.elements.presentation) {
   form.elements.presentation.value=JSON.stringify(entry.data.presentation||{});
   layoutSelect.value = (entry.data.presentation && entry.data.presentation.layout && entry.data.presentation.layout.mode) ? entry.data.presentation.layout.mode : 'default';
-}form.elements.newTag.value='';$('#image-status').textContent=entry.data.cover?`Attached: ${entry.data.cover}`:'Optional. It will be saved locally with the project.';setupForm(activeType,{...entry.data,id});$('#delete').hidden=false;document.querySelectorAll('.types button').forEach(x=>x.classList.toggle('selected',x.dataset.type===activeType)); previewBtn.hidden = false; updatePreview(); setTimeout(() => { historyStack = []; historyIndex = -1; captureSnapshot('Loaded entry'); savedStateStr = JSON.stringify(historyStack[0].state); updateHistoryUI(); }, 50); }
+}form.elements.newTag.value='';$('#image-status').textContent=entry.data.cover?`Attached: ${entry.data.cover}`:'Optional. It will be saved locally with the project.';setupForm(activeType,{...entry.data,id});$('#delete').hidden=false;document.querySelectorAll('.types button').forEach(x=>x.classList.toggle('selected',x.dataset.type===activeType)); window.USE_BLOCKNOTE_POC = true; document.getElementById('type-select').value = activeType; document.getElementById('world-display').value = typeWorld[activeType] || 'Life'; 
+  if (window.BlockNotePOCModule && typeof window.BlockNotePOCModule.unmountBlockNotePOC === 'function') {
+      window.BlockNotePOCModule.unmountBlockNotePOC('blocknote-container');
+  }
+  location.hash = mode === 'editor' ? '/editor/' + id : '/setup/' + id;
+  setTimeout(() => { historyStack = []; historyIndex = -1; captureSnapshot('Loaded entry'); savedStateStr = JSON.stringify(historyStack[0].state); updateHistoryUI(); }, 50); }
 async function loadCurrently(){const data=await request('/api/currently');const fields=['listening','learning','reading','watching','building','thinking','wanting','planning','obsessed'];const form=$('#currently-form');form.innerHTML=fields.map(field=>`<label>${field}<input name="${field}" value="${esc(data[field]||'')}" placeholder="Add what is true right now"></label>`).join('')+'<div class="actions"><button class="primary">Save currently <b>→</b></button><p class="form-message" role="status"></p></div>';form.onsubmit=async e=>{e.preventDefault();const values=Object.fromEntries(new FormData(form));await request('/api/currently',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(values)});$('.form-message').textContent='Saved.'};}
 async function loadLife(){const data=await request('/api/life-list');const form=$('#life-form');['done','next','someday'].forEach(key=>form.elements[key].value=(data[key]||[]).join('\n'));form.onsubmit=async e=>{e.preventDefault();const values=Object.fromEntries(['done','next','someday'].map(key=>[key,form.elements[key].value.split('\n').map(x=>x.trim()).filter(Boolean)]));await request('/api/life-list',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(values)});form.querySelector('.form-message').textContent='Saved.'};}
 
@@ -264,17 +504,20 @@ function updatePreview() {
   initCanvasEditor();
 }
 
-previewBtn.onclick = () => {
-  previewPane.hidden = false;
-  previewBtn.hidden = true;
-  updatePreview();
-  
-};
-
-closePreviewBtn.onclick = () => {
-  previewPane.hidden = true;
-  previewBtn.hidden = false;
-};
+if (previewBtn) {
+  previewBtn.onclick = () => {
+    previewPane.hidden = false;
+    previewBtn.hidden = true;
+    closePreviewBtn.hidden = false;
+    updatePreview();
+  };
+}
+if (closePreviewBtn) {
+  closePreviewBtn.onclick = () => {
+    previewPane.hidden = true;
+    previewBtn.hidden = false;
+  };
+}
 
 entryForm.addEventListener('input', (e) => {
   updatePreview();
@@ -457,8 +700,12 @@ function handleMentionKeydown(e) {
   }
 }
 
-storyTextarea.addEventListener('input', handleMentionInput);
-storyTextarea.addEventListener('keydown', handleMentionKeydown);
+// BlockNote owns the story surface in the active editor. The legacy textarea
+// is optional, so its absence must never prevent the router from starting.
+if (storyTextarea) {
+  storyTextarea.addEventListener('input', handleMentionInput);
+  storyTextarea.addEventListener('keydown', handleMentionKeydown);
+}
 // We will also bind these to inlineRich below!
 
 
@@ -476,18 +723,18 @@ let activeOriginalPresentation = '{}';
 
 
 
-inlineInput.addEventListener('input', () => {
-  if (activeEditField && activeEditField !== 'cover') {
-    entryForm.elements[activeEditField].value = inlineInput.value;
-    updatePreview();
-  }
+if (typeof inlineInput !== 'undefined' && inlineInput) {
+  inlineInput.addEventListener('input', () => {
+    if (activeEditField && activeEditField !== 'cover') {
+      entryForm.elements[activeEditField].value = inlineInput.value;
+      updatePreview();
+    }
     if (typeof handleTyping === 'function') handleTyping();
-    handleTyping();
-});
-
-inlineInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeInlineEditor(true);
-});
+  });
+  inlineInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeInlineEditor(true);
+  });
+}
 
 function renderOptions(key, label, options) {
   const p = getPres();
@@ -908,7 +1155,7 @@ function updateHistoryUI() {
   
   const currentStateStr = historyIndex >= 0 ? JSON.stringify(historyStack[historyIndex].state) : '';
   const isDirty = currentStateStr !== savedStateStr;
-  dirtyIndicator.textContent = isDirty ? '● Unsaved changes' : 'Saved';
+  dirtyIndicator.textContent = isDirty ? '● Unsaved' : 'Saved';
   dirtyIndicator.style.color = isDirty ? 'var(--accent, #e59a72)' : 'var(--text-light)';
   
   if (historyPanel && historyPanel.style.display !== 'none') {
@@ -1014,7 +1261,8 @@ function initCanvasEditor() {
     if (window.USE_BLOCKNOTE_POC) {
       proseEl.innerHTML = '<div id="blocknote-container"></div>';
       import('./blocknote-poc.js').then(module => {
-        const markdown = storyBlocks.map(b => b.raw).join('\n\n');
+        window.BlockNotePOCModule = module;
+        const markdown = document.forms['entry-form'].elements.story.value || '';
         module.mountBlockNotePOC('blocknote-container', markdown);
       });
       // Ensure CSS is loaded
@@ -1181,9 +1429,12 @@ const newBtnUndo = document.getElementById('btn-undo');
 const newBtnRedo = document.getElementById('btn-redo');
 
 if (btnBackEntries) btnBackEntries.onclick = () => { show('entries'); };
-if (btnSaveCanvas) btnSaveCanvas.onclick = () => { 
-  $('#entry-form').requestSubmit();
-};
+if (btnSaveCanvas) {
+  btnSaveCanvas.onclick = async (event) => {
+    event.preventDefault();
+    await saveCurrentEntry();
+  };
+}
 
 if (newBtnUndo) newBtnUndo.onclick = window.undo;
 if (newBtnRedo) newBtnRedo.onclick = window.redo;
@@ -1329,3 +1580,22 @@ function updateStoryFromBlocks() {
 window.parseMarkdownToBlocks = parseMarkdownToBlocks;
 window.updateStoryFromBlocks = updateStoryFromBlocks;
 window.updatePreview = updatePreview;
+
+window.addEventListener('load', () => {
+  if (location.hash) {
+    window.onhashchange();
+  } else {
+    show('home');
+  }
+});
+
+// Intercept public links inside editor
+document.getElementById('preview-content')?.addEventListener('click', (e) => {
+  const link = e.target.closest('a');
+  if (link && link.href) {
+    if (!link.href.includes('#/editor') && !link.href.includes('#/setup') && !link.href.includes('#/entries')) {
+      link.target = '_blank';
+      link.title = 'Open public page ↗';
+    }
+  }
+});

@@ -7,6 +7,7 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 const entriesDir = path.join(root, 'src/content/entries');
 const captureDir = path.join(root, 'capture');
 const publicImages = path.join(root, 'public/images');
+const publicUploads = path.join(root, 'public/uploads');
 const trashDir = path.join(root, '.trash');
 const currentlyFile = path.join(root, 'src/content/currently/now.md');
 const lifeListFile = path.join(root, 'src/content/lifeLists/life-list.md');
@@ -20,7 +21,32 @@ const safeName = (value) => value.replace(/[^a-zA-Z0-9._-]/g,'-');
 const escapeYaml = (value='') => JSON.stringify(String(value));
 const list = (value) => JSON.stringify(Array.isArray(value) ? value.filter(Boolean) : []);
 
-async function body(req) { let raw=''; for await (const chunk of req) raw += chunk; return raw ? JSON.parse(raw) : {}; }
+const mediaTypes = {
+  image: new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']),
+  audio: new Set(['audio/mpeg', 'audio/mp4', 'audio/ogg', 'audio/wav', 'audio/webm']),
+  video: new Set(['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'])
+};
+const extensionByMime = { 'image/jpeg':'jpg', 'image/png':'png', 'image/gif':'gif', 'image/webp':'webp', 'audio/mpeg':'mp3', 'audio/mp4':'m4a', 'audio/ogg':'ogg', 'audio/wav':'wav', 'audio/webm':'webm', 'video/mp4':'mp4', 'video/webm':'webm', 'video/ogg':'ogv', 'video/quicktime':'mov' };
+const mimeByExtension = Object.fromEntries(Object.entries(extensionByMime).map(([mime, ext]) => [ext, mime]));
+
+async function body(req, limit = 35 * 1024 * 1024) {
+  let raw = '';
+  for await (const chunk of req) {
+    raw += chunk;
+    if (raw.length > limit) throw Object.assign(new Error('Upload is too large (maximum 25 MB).'), { status: 413 });
+  }
+  return raw ? JSON.parse(raw) : {};
+}
+function decodeUpload(data) {
+  const hit = String(data.dataUrl || '').match(/^data:([^;]+);base64,([A-Za-z0-9+/=]+)$/);
+  if (!hit) throw Object.assign(new Error('Choose a valid local media file.'), { status: 400 });
+  const mime = hit[1].toLowerCase();
+  const kind = Object.entries(mediaTypes).find(([, allowed]) => allowed.has(mime))?.[0];
+  if (!kind || (data.type && data.type.toLowerCase() !== mime)) throw Object.assign(new Error('Only supported image, audio, or video formats can be uploaded.'), { status: 415 });
+  const bytes = Buffer.from(hit[2], 'base64');
+  if (!bytes.length || bytes.length > 25 * 1024 * 1024) throw Object.assign(new Error('Upload is too large (maximum 25 MB).'), { status: 413 });
+  return { bytes, kind, ext: extensionByMime[mime] };
+}
 async function walk(dir) { const files = await fs.readdir(dir, { withFileTypes:true }); return (await Promise.all(files.map(file => file.isDirectory() ? walk(path.join(dir,file.name)) : [path.join(dir,file.name)]))).flat(); }
 function parseArray(value='') { try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : []; } catch { return value.replace(/^\[|\]$/g,'').split(',').map(x=>x.trim()).filter(Boolean); } }
 function parseFrontmatter(raw) {
@@ -55,16 +81,39 @@ const server=http.createServer(async (req,res)=>{
     if (req.method==='GET' && url.pathname==='/style.css') return text(res,200,await fs.readFile(path.join(captureDir,'style.css'),'utf8'),'text/css; charset=utf-8');
     if (req.method==='GET' && url.pathname==='/global.css') return text(res,200,await fs.readFile(path.join(root,'src/styles/global.css'),'utf8'),'text/css; charset=utf-8');
     if (req.method==='GET' && url.pathname==='/lib/entryTemplate.js') return text(res,200,await fs.readFile(path.join(root,'src/lib/entryTemplate.js'),'utf8'),'text/javascript; charset=utf-8');
+    if (req.method==='GET' && (url.pathname.startsWith('/uploads/') || url.pathname.startsWith('/images/'))) {
+      const name = path.basename(decodeURIComponent(url.pathname));
+      const directory = url.pathname.startsWith('/uploads/') ? publicUploads : publicImages;
+      const file = path.join(directory, name);
+      const ext = path.extname(name).slice(1).toLowerCase();
+      return text(res, 200, await fs.readFile(file), mimeByExtension[ext] || 'application/octet-stream');
+    }
     if (req.method==='GET' && url.pathname==='/api/entries') return json(res,200,await readEntries());
     if (req.method==='GET' && url.pathname.startsWith('/api/entry/')) { const id=decodeURIComponent(url.pathname.slice(11)); const found=(await readEntries(true)).find(entry=>entry.id===id); return found?json(res,200,found):json(res,404,{error:'Entry not found'}); }
     if (req.method==='POST' && url.pathname==='/api/entry') { const data=await body(req); if (!types.includes(data.type)||!data.title?.trim()) return json(res,400,{error:'Choose a type and give it a title.'}); const id=data.existingId || slugify(data.title); const file=await uniqueFile(id,data.existingId); await fs.mkdir(path.dirname(file),{recursive:true}); await fs.writeFile(file,markdown(data)); return json(res,200,{ok:true,id:path.relative(entriesDir,file).replace(/\.md$/,'').split(path.sep).join('/')}); }
     if (req.method==='DELETE' && url.pathname.startsWith('/api/entry/')) { const data=await body(req); if (data.confirm!==true) return json(res,400,{error:'Deletion must be confirmed.'}); const id=decodeURIComponent(url.pathname.slice(11)); const file=path.resolve(entriesDir,`${id}.md`); if (!file.startsWith(entriesDir+path.sep)) return json(res,400,{error:'Invalid entry'}); await fs.mkdir(trashDir,{recursive:true}); await fs.rename(file,path.join(trashDir,`${Date.now()}-${safeName(id)}.md`)); return json(res,200,{ok:true}); }
-    if (req.method==='POST' && url.pathname==='/api/image') { const data=await body(req); const hit=(data.dataUrl||'').match(/^data:([^;]+);base64,(.+)$/); if (!hit) return json(res,400,{error:'Choose an image first.'}); const ext=(data.name||'').split('.').pop() || hit[1].split('/').pop() || 'jpg'; const name=`${Date.now()}-${safeName(slugify((data.name||'image').replace(/\.[^.]+$/,'')))}.${safeName(ext)}`; await fs.mkdir(publicImages,{recursive:true}); await fs.writeFile(path.join(publicImages,name),Buffer.from(hit[2],'base64')); return json(res,200,{url:`/images/${name}`}); }
+    if (req.method==='POST' && url.pathname==='/api/image') {
+      const data = await body(req);
+      const upload = decodeUpload({ ...data, type: data.type || String(data.dataUrl || '').match(/^data:([^;]+)/)?.[1] });
+      if (upload.kind !== 'image') return json(res,415,{error:'Cover uploads must be images.'});
+      const name = `${Date.now()}-${safeName(slugify((data.name||'image').replace(/\.[^.]+$/,'')))}.${upload.ext}`;
+      await fs.mkdir(publicImages,{recursive:true});
+      await fs.writeFile(path.join(publicImages,name),upload.bytes);
+      return json(res,200,{url:`/images/${name}`});
+    }
+    if (req.method==='POST' && url.pathname==='/api/upload') {
+      const data = await body(req);
+      const upload = decodeUpload(data);
+      const name = `${Date.now()}-${safeName(slugify((data.name||upload.kind).replace(/\.[^.]+$/,'')))}.${upload.ext}`;
+      await fs.mkdir(publicUploads,{recursive:true});
+      await fs.writeFile(path.join(publicUploads,name),upload.bytes);
+      return json(res,200,{ok:true,url:`/uploads/${name}`,kind:upload.kind});
+    }
     if (req.method==='GET' && url.pathname==='/api/currently') return json(res,200,await readSimple(currentlyFile));
     if (req.method==='PUT' && url.pathname==='/api/currently') { const data=await body(req); await writeSimple(currentlyFile,{...data,updated:new Date().toISOString().slice(0,10)}); return json(res,200,{ok:true}); }
     if (req.method==='GET' && url.pathname==='/api/life-list') { const raw=await fs.readFile(lifeListFile,'utf8'); const parsed=parseFrontmatter(raw).data; if (!Array.isArray(parsed.done)) { const section=(name)=>{const match=raw.match(new RegExp(`${name}:\\n((?:\\s+- .+\\n?)*)`)); return match?[...match[1].matchAll(/- (.+)/g)].map(x=>x[1]):[]}; parsed.done=section('done');parsed.next=section('next');parsed.someday=section('someday'); } return json(res,200,parsed); }
     if (req.method==='PUT' && url.pathname==='/api/life-list') { const data=await body(req); await writeSimple(lifeListFile,{updated:new Date().toISOString().slice(0,10),done:data.done||[],next:data.next||[],someday:data.someday||[]}); return json(res,200,{ok:true}); }
     return text(res,404,'Not found','text/plain');
-  } catch (error) { console.error(error); return json(res,500,{error:error.message||'Something went wrong'}); }
+  } catch (error) { console.error(error); return json(res,error.status || 500,{error:error.message||'Something went wrong'}); }
 });
 server.listen(4322,'127.0.0.1',()=>console.log('Raj’s Corner Capture is ready at http://127.0.0.1:4322'));

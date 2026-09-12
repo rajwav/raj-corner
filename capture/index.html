@@ -20,37 +20,120 @@
     box-shadow: 0 0 0 4px rgba(128, 128, 128, 0.08);
   }
 </style>
-</head><body><header><a href="#capture" class="mark">RAJ <i>✦</i> CAPTURE</a><span>Local only · files stay yours</span></header><main><section id="home" class="intro"><p class="label">Your personal notebook</p><h1>What happened?</h1><p>Turn a moment into a page before it disappears. No frontmatter. No code.</p><button class="primary" data-go="capture">Capture something <b>↓</b></button></section><nav class="tabs"><button data-go="capture">Capture</button><button data-go="entries">Entries</button><button data-go="currently">Currently</button><button data-go="life-list">Life list</button></nav>
+</head><body><header><a href="#/entries" class="mark">RAJ <i>✦</i> CAPTURE</a><span>Local only · files stay yours</span></header><main><section id="home" class="intro"><p class="label">Your personal notebook</p><h1>What happened?</h1><p>Turn a moment into a page before it disappears. No frontmatter. No code.</p><button class="primary" data-go="capture">Capture something <b>↓</b></button></section><nav class="tabs"><button data-go="capture">Capture</button><button data-go="entries">Entries</button><button data-go="currently">Currently</button><button data-go="life-list">Life list</button></nav>
 <div id="capture-workspace" style="display:flex; flex-direction:column; gap:0; align-items:stretch;">
-<section id="capture" class="panel" style="display:none !important;"><div class="section-title"><p class="label">New entry</p><h2>Choose what you’re saving.</h2></div><div id="types" class="types"></div><form id="entry-form" hidden><input type="hidden" name="existingId"><input type="hidden" name="cover"><input type="hidden" name="presentation"><div class="form-heading"><p id="type-label" class="label"></p><h2 id="form-title">A small thing worth keeping.</h2></div><label id="title-field"><span>Title</span> <input name="title" placeholder="That evening in Puri"></label><div class="two"><label>Date <input type="date" name="date"></label><label id="location-field"><span>Place</span> <input name="location" placeholder="Puri"></label></div>
-<label id="layout-field" style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; padding-top:12px; border-top:1px solid var(--line);">
-  <span style="font-family:var(--mono); text-transform:uppercase; font-size:11px; color:var(--text-light);">Layout Mode</span>
-  <select id="layout-mode-select" style="background:var(--bg); border:1px solid var(--line); font-family:var(--mono); font-size:11px; padding:4px 8px; border-radius:4px; color:var(--text);">
-    <option value="default">Default</option>
-    <option value="editorial">Editorial</option>
-    <option value="centered">Centered</option>
-    <option value="split">Split</option>
-    <option value="immersive">Immersive</option>
-  </select>
-</label><label id="description-field"><span>Description</span> <textarea name="description" rows="2" placeholder="Optional brief summary..."></textarea></label><label id="story-field"><span>Story</span> <textarea name="story" rows="6" placeholder="What do you want future-you to remember?"></textarea><div id="mention-autocomplete" class="mention-autocomplete" hidden></div></label><details><summary>Connect it to other things (optional)</summary><div class="connections"><fieldset><legend>Tags already in your archive</legend><div id="tag-options" class="checks"></div><label class="custom-tag">Add a new tag <input name="newTag" placeholder="one simple word"></label></fieldset><fieldset><legend>Related entries</legend><div id="related-options" class="checks related-checks"></div></fieldset><label>People <input name="people" list="people-suggestions" placeholder="Names, separated by commas"><datalist id="people-suggestions"></datalist></label></div></details><label class="image-upload">Attach a photograph <input type="file" id="image" accept="image/*"><small id="image-status">Optional. It will be saved locally with the project.</small></label><div class="actions"><button class="primary" type="submit">Save to my archive <b>→</b></button><button type="button" id="preview-btn" class="secondary" hidden>View public page</button><button type="button" id="cancel">Cancel</button><button type="button" id="delete" class="danger" hidden>Move to trash</button></div><p id="message" role="status"></p></form></section>
-<section id="preview-pane" class="panel" style="width:100%; border:none; background:var(--bg); padding:0; flex:1;">
-  
+<section id="capture" class="panel" style="max-width: 600px; margin: 40px auto; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); display: none;">
+  <div class="section-title" style="margin-bottom: 24px;">
+    <p class="label">Stage 1</p>
+    <h2>Entry Setup</h2>
+  </div>
+  <form id="entry-form">
+    <input type="hidden" name="existingId">
+    <input type="hidden" name="cover">
+    <input type="hidden" name="presentation">
+    <input type="hidden" name="story">
+    
+    
+
+    <div style="display:flex; gap:16px; margin-bottom: 16px;">
+      <label style="flex:1;"><span>Type</span>
+        <select id="type-select" name="type" style="width:100%; padding:8px; border:1px solid var(--line); border-radius:4px; font-family:var(--mono);">
+          <option value="memory">Memory</option>
+          <option value="trip">Trip</option>
+          <option value="photo">Photo</option>
+          <option value="person">Person</option>
+          <option value="car">Car</option>
+          <option value="music">Music</option>
+          <option value="thought">Thought</option>
+          <option value="idea">Idea</option>
+          <option value="experiment">Experiment</option>
+          <option value="place">Place</option>
+          <option value="milestone">Milestone</option>
+          <option value="dream">Dream</option>
+        </select>
+      </label>
+      <label style="flex:1;"><span>World</span>
+        <input id="world-display" readonly disabled value="Life" style="width:100%; padding:8px; border:1px solid var(--line); border-radius:4px; font-family:var(--mono); background:var(--bg-alt); color:var(--text-light);" title="Derived from Type">
+      </label>
+    </div>
+
+    <label><span>Title</span> <input id="setup-title" name="title" placeholder="That evening in Puri" style="font-size: 16px;"></label>
+    <label><span>Description</span> <textarea id="setup-description" name="description" rows="2" placeholder="Optional brief summary..."></textarea></label>
+
+    <div style="display:flex; gap:16px; margin-bottom: 16px;">
+      <label style="flex:1;"><span>Date</span> <input type="date" name="date" style="width:100%;"></label>
+      <label style="flex:1;"><span>Place</span> <input name="location" placeholder="Puri" style="width:100%;"></label>
+    </div>
+    
+    <div style="display:flex; gap:16px; margin-bottom: 16px;">
+      <label style="flex:1;"><span>Status</span>
+        <select name="status" style="width:100%; padding:8px; border:1px solid var(--line); border-radius:4px; font-family:var(--mono);">
+          <option value="draft">Draft</option>
+          <option value="published">Published</option>
+        </select>
+      </label>
+      <label style="flex:1; display:flex; align-items:center; gap:8px;">
+        <input type="checkbox" name="featured" id="setup-featured">
+        <span>Featured</span>
+      </label>
+    </div>
+
+    <details style="margin-bottom:16px; border:1px solid var(--line); border-radius:4px; padding:12px;">
+      <summary style="font-family:var(--mono); font-size:11px; text-transform:uppercase; cursor:pointer;">Connections</summary>
+      <div style="margin-top:12px;">
+        <fieldset><legend>Tags</legend><div id="tag-options" class="checks"></div><label class="custom-tag">Add new tag <input name="newTag" placeholder="e.g. sunset"></label></fieldset>
+        <fieldset><legend>Related entries</legend><div id="related-options" class="checks related-checks"></div></fieldset>
+        <label>People <input name="people" list="people-suggestions" placeholder="Names, separated by commas"><datalist id="people-suggestions"></datalist></label>
+      </div>
+    </details>
+
+    <label class="image-upload" style="margin-bottom:24px;"><span>Cover Photograph</span> <input type="file" id="image" accept="image/*"><small id="image-status">Optional. Will be saved locally.</small></label>
+
+    <div class="actions" style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <button type="button" id="cancel" class="secondary">Cancel</button>
+        <button type="button" id="delete" class="danger" hidden>Trash</button>
+      </div>
+      <button type="button" id="btn-continue-editor" class="primary" style="font-size: 14px; padding: 10px 20px;">Continue to Editor →</button>
+    </div>
+    <p id="message" role="status"></p>
+  </form>
+</section>
+
+<section id="preview-pane" class="panel" style="width:100%; border:none; background:var(--bg); padding:0; flex:1; display:none;">
   <div id="editor-toolbar" style="position:sticky; top:0; background:var(--bg); padding:12px 20px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; z-index:100; font-family:var(--mono); font-size:11px;">
     <div style="display:flex; gap:16px; align-items:center;">
-      <button type="button" id="btn-back-entries" class="secondary" style="border:none; padding:4px;">← Archive</button>
+      <button type="button" id="btn-back-setup" class="secondary" style="border:none; padding:4px;">← Capture</button>
       <span id="dirty-indicator" style="color:var(--text-light);">Saved</span>
     </div>
     <div style="display:flex; gap:8px; align-items:center;">
-      <button type="button" class="secondary" style="background:#e0f2fe; color:#0369a1; border-color:#bae6fd;" onclick="window.USE_BLOCKNOTE_POC = !window.USE_BLOCKNOTE_POC; window.updatePreview();">Toggle BlockNote</button>
+      <button type="button" id="btn-settings" class="secondary">Page Settings</button>
       <button type="button" id="btn-undo" class="secondary" disabled title="Undo (Cmd/Ctrl + Z)">↩</button>
       <button type="button" id="btn-redo" class="secondary" disabled title="Redo (Cmd/Ctrl + Y)">↪</button>
       <button type="button" id="btn-save-canvas" class="primary">Save</button>
-      <button type="button" id="close-preview" class="secondary" hidden>Close</button>
     </div>
+  </div>
+  
+  <div id="page-settings-panel" style="display:none; position:fixed; top:60px; right:20px; width:280px; background:var(--bg); border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 30px rgba(0,0,0,0.1); z-index:200; padding:16px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <h3 style="margin:0; font-family:var(--mono); font-size:12px; text-transform:uppercase;">Presentation Settings</h3>
+      <button type="button" class="secondary" onclick="document.getElementById('page-settings-panel').style.display='none'" style="border:none; padding:4px;">✕</button>
+    </div>
+    <label style="display:block; margin-bottom:12px;">
+      <span style="font-size:11px; font-family:var(--mono); display:block; margin-bottom:4px;">Layout</span>
+      <select id="layout-mode-select" style="width:100%; padding:6px;">
+        <option value="default">Default</option>
+        <option value="editorial">Editorial</option>
+        <option value="centered">Centered</option>
+        <option value="split">Split</option>
+        <option value="immersive">Immersive</option>
+      </select>
+    </label>
+    <p style="font-size:11px; color:var(--text-light); margin:0;">More settings (Title, Description, Cover) can be added here in the future.</p>
   </div>
 
   <link rel="stylesheet" href="/global.css">
-  <div id="preview-content" style="padding:20px; "></div>
+  <div id="preview-content" style="padding:20px;"></div>
 </section>
 </div>
 <section id="entries" class="panel" hidden><div class="section-title"><p class="label">Your archive, editable</p><h2>Open any entry to change it.</h2></div><div id="entry-list" class="entry-list"></div></section><section id="currently" class="panel" hidden><div class="section-title"><p class="label">Living layer</p><h2>What is true right now?</h2><p>These are allowed to change. The archive does not.</p></div><form id="currently-form" class="snapshot"></form></section><section id="life-list" class="panel" hidden><div class="section-title"><p class="label">A list for a whole life</p><h2>The life list.</h2></div><form id="life-form" class="life-form"><label>Done <textarea name="done" rows="5" placeholder="One thing per line"></textarea></label><label>Next <textarea name="next" rows="5" placeholder="One thing per line"></textarea></label><label>Someday <textarea name="someday" rows="5" placeholder="One thing per line"></textarea></label><button class="primary">Save life list <b>→</b></button><p class="form-message" role="status"></p></form></section></main><script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>

@@ -74246,16 +74246,33 @@ var ht4 = {
 };
 
 // capture/blocknote-editor.jsx
+async function uploadMedia(file) {
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error("Could not read the selected file."));
+    reader.readAsDataURL(file);
+  });
+  const response = await fetch("/api/upload", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: file.name, type: file.type, dataUrl })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || `Upload failed (${response.status}).`);
+  return payload.url;
+}
 function BlockNotePOC({ initialMarkdown, onChange }) {
   const [editor, setEditor] = (0, import_react92.useState)(null);
   (0, import_react92.useEffect)(() => {
     async function init() {
-      const e6 = Wi.create();
+      const e6 = Wi.create({ uploadFile: uploadMedia });
       if (initialMarkdown) {
         const blocks = await e6.tryParseMarkdownToBlocks(initialMarkdown);
         e6.replaceBlocks(e6.document, blocks);
       }
       setEditor(e6);
+      if (onChange) onChange(e6);
     }
     init();
   }, [initialMarkdown]);
@@ -74279,6 +74296,7 @@ function mountBlockNotePOC(containerId, initialMarkdown) {
   if (!container) return;
   if (root) {
     root.unmount();
+    currentEditor = null;
   }
   root = (0, import_client2.createRoot)(container);
   root.render(
@@ -74288,6 +74306,7 @@ function mountBlockNotePOC(containerId, initialMarkdown) {
         initialMarkdown,
         onChange: (ed) => {
           currentEditor = ed;
+          if (typeof window.markDirty === "function") window.markDirty();
         }
       }
     )
@@ -74301,11 +74320,15 @@ function unmountBlockNotePOC() {
   }
 }
 async function getBlockNoteMarkdown() {
-  if (!currentEditor) return "";
+  if (!currentEditor) throw new Error("Editor is still loading.");
   return await currentEditor.blocksToMarkdownLossy(currentEditor.document);
+}
+function isBlockNoteReady() {
+  return Boolean(currentEditor);
 }
 export {
   getBlockNoteMarkdown,
+  isBlockNoteReady,
   mountBlockNotePOC,
   unmountBlockNotePOC
 };

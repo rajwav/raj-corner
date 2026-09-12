@@ -5,17 +5,35 @@ import { BlockNoteEditor } from '@blocknote/core';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 
+async function uploadMedia(file) {
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error('Could not read the selected file.'));
+    reader.readAsDataURL(file);
+  });
+  const response = await fetch('/api/upload', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: file.name, type: file.type, dataUrl }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || `Upload failed (${response.status}).`);
+  return payload.url;
+}
+
 function BlockNotePOC({ initialMarkdown, onChange }) {
   const [editor, setEditor] = useState(null);
 
   useEffect(() => {
     async function init() {
-      const e = BlockNoteEditor.create();
+      const e = BlockNoteEditor.create({ uploadFile: uploadMedia });
       if (initialMarkdown) {
         const blocks = await e.tryParseMarkdownToBlocks(initialMarkdown);
         e.replaceBlocks(e.document, blocks);
       }
       setEditor(e);
+      if (onChange) onChange(e);
     }
     init();
   }, [initialMarkdown]);
@@ -45,13 +63,17 @@ export function mountBlockNotePOC(containerId, initialMarkdown) {
   
   if (root) {
     root.unmount();
+    currentEditor = null;
   }
   
   root = createRoot(container);
   root.render(
     <BlockNotePOC 
       initialMarkdown={initialMarkdown} 
-      onChange={(ed) => { currentEditor = ed; }} 
+      onChange={(ed) => { 
+        currentEditor = ed; 
+        if (typeof window.markDirty === 'function') window.markDirty(); 
+      }} 
     />
   );
 }
@@ -65,6 +87,10 @@ export function unmountBlockNotePOC() {
 }
 
 export async function getBlockNoteMarkdown() {
-  if (!currentEditor) return '';
+  if (!currentEditor) throw new Error('Editor is still loading.');
   return await currentEditor.blocksToMarkdownLossy(currentEditor.document);
+}
+
+export function isBlockNoteReady() {
+  return Boolean(currentEditor);
 }
