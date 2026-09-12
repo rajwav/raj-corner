@@ -74246,6 +74246,7 @@ var ht4 = {
 };
 
 // capture/blocknote-editor.jsx
+var import_jsx_runtime93 = __toESM(require_jsx_runtime(), 1);
 async function uploadMedia(file) {
   const dataUrl = await new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -74277,9 +74278,9 @@ function BlockNotePOC({ initialMarkdown, onChange }) {
     init();
   }, [initialMarkdown]);
   if (!editor) {
-    return /* @__PURE__ */ import_react92.default.createElement("div", { style: { padding: "20px", fontFamily: "var(--mono)", color: "var(--text-light)" } }, "Loading BlockNote...");
+    return /* @__PURE__ */ (0, import_jsx_runtime93.jsx)("div", { style: { padding: "20px", fontFamily: "var(--mono)", color: "var(--text-light)" }, children: "Loading BlockNote..." });
   }
-  return /* @__PURE__ */ import_react92.default.createElement("div", { className: "blocknote-poc-wrapper", style: { padding: "20px 0", minHeight: "300px" } }, /* @__PURE__ */ import_react92.default.createElement(
+  return /* @__PURE__ */ (0, import_jsx_runtime93.jsx)("div", { className: "blocknote-poc-wrapper", style: { padding: "20px 0", minHeight: "300px" }, children: /* @__PURE__ */ (0, import_jsx_runtime93.jsx)(
     mt5,
     {
       editor,
@@ -74287,7 +74288,7 @@ function BlockNotePOC({ initialMarkdown, onChange }) {
         if (onChange) onChange(editor);
       }
     }
-  ));
+  ) });
 }
 var root = null;
 var currentEditor = null;
@@ -74300,7 +74301,7 @@ function mountBlockNotePOC(containerId, initialMarkdown) {
   }
   root = (0, import_client2.createRoot)(container);
   root.render(
-    /* @__PURE__ */ import_react92.default.createElement(
+    /* @__PURE__ */ (0, import_jsx_runtime93.jsx)(
       BlockNotePOC,
       {
         initialMarkdown,
@@ -74326,10 +74327,28 @@ async function getBlockNoteMarkdown() {
 function isBlockNoteReady() {
   return Boolean(currentEditor);
 }
+function undoStory() {
+  if (!currentEditor) return false;
+  try {
+    return currentEditor._tiptapEditor.chain().focus().undo().run();
+  } catch (e6) {
+    return false;
+  }
+}
+function redoStory() {
+  if (!currentEditor) return false;
+  try {
+    return currentEditor._tiptapEditor.chain().focus().redo().run();
+  } catch (e6) {
+    return false;
+  }
+}
 export {
   getBlockNoteMarkdown,
   isBlockNoteReady,
   mountBlockNotePOC,
+  redoStory,
+  undoStory,
   unmountBlockNotePOC
 };
 /*! Bundled license information:
