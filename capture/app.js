@@ -1317,7 +1317,8 @@ function restoreSnapshot(index) {
 
 window.restoreSnapshot = restoreSnapshot;
 
-function undo() {
+function undo(e) {
+  if (e && e.preventDefault) { e.preventDefault(); e.stopPropagation(); }
   if (window.USE_BLOCKNOTE_POC && window.BlockNotePOCModule && window.BlockNotePOCModule.isBlockNoteReady()) {
     // Delegate to BlockNote's native ProseMirror undo history
     window.BlockNotePOCModule.undoStory();
@@ -1326,7 +1327,8 @@ function undo() {
     if (historyIndex > 0) restoreSnapshot(historyIndex - 1);
   }
 }
-function redo() {
+function redo(e) {
+  if (e && e.preventDefault) { e.preventDefault(); e.stopPropagation(); }
   if (window.USE_BLOCKNOTE_POC && window.BlockNotePOCModule && window.BlockNotePOCModule.isBlockNoteReady()) {
     // Delegate to BlockNote's native ProseMirror redo history
     window.BlockNotePOCModule.redoStory();
@@ -1339,8 +1341,14 @@ function redo() {
 window.undo = undo;
 window.redo = redo;
 
-if (btnUndo) btnUndo.onclick = undo;
-if (btnRedo) btnRedo.onclick = redo;
+if (btnUndo) {
+  btnUndo.onmousedown = (e) => e.preventDefault();
+  btnUndo.onclick = undo;
+}
+if (btnRedo) {
+  btnRedo.onmousedown = (e) => e.preventDefault();
+  btnRedo.onclick = redo;
+}
 
 function updateHistoryUI() {
   if (!btnUndo) return;
@@ -1659,8 +1667,14 @@ if (btnSaveCanvas) {
   };
 }
 
-if (newBtnUndo) newBtnUndo.onclick = window.undo;
-if (newBtnRedo) newBtnRedo.onclick = window.redo;
+if (newBtnUndo) {
+  newBtnUndo.onmousedown = (e) => e.preventDefault();
+  newBtnUndo.onclick = window.undo;
+}
+if (newBtnRedo) {
+  newBtnRedo.onmousedown = (e) => e.preventDefault();
+  newBtnRedo.onclick = window.redo;
+}
 
 
 previewContent.addEventListener('click', (e) => {

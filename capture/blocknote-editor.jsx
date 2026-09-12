@@ -95,13 +95,10 @@ export function isBlockNoteReady() {
   return Boolean(currentEditor);
 }
 
-// Bridge: called by the Capture toolbar Undo/Redo buttons when BlockNote is active.
-// Uses TipTap's command API (BlockNote wraps TipTap/ProseMirror internally).
-// chain().focus() refocuses the editor after the toolbar button click steals focus.
 export function undoStory() {
   if (!currentEditor) return false;
   try {
-    return currentEditor._tiptapEditor.chain().focus().undo().run();
+    return currentEditor.undo();
   } catch (e) {
     return false;
   }
@@ -110,8 +107,9 @@ export function undoStory() {
 export function redoStory() {
   if (!currentEditor) return false;
   try {
-    return currentEditor._tiptapEditor.chain().focus().redo().run();
+    return currentEditor.redo();
   } catch (e) {
     return false;
   }
 }
+

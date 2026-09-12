@@ -74330,7 +74330,7 @@ function isBlockNoteReady() {
 function undoStory() {
   if (!currentEditor) return false;
   try {
-    return currentEditor._tiptapEditor.chain().focus().undo().run();
+    return currentEditor.undo();
   } catch (e6) {
     return false;
   }
@@ -74338,7 +74338,7 @@ function undoStory() {
 function redoStory() {
   if (!currentEditor) return false;
   try {
-    return currentEditor._tiptapEditor.chain().focus().redo().run();
+    return currentEditor.redo();
   } catch (e6) {
     return false;
   }
