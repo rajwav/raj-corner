@@ -133,7 +133,13 @@
   </div>
 
   <link rel="stylesheet" href="/global.css">
-  <div id="preview-content" style="padding:20px;"></div>
+  <style>
+  #preview-content { padding: 40px 60px; max-width: 800px; margin: 0 auto; min-height: calc(100vh - 60px); }
+  @media (max-width: 600px) {
+    #preview-content { padding: 20px 30px 20px 40px; }
+  }
+</style>
+  <div id="preview-content"></div>
 </section>
 </div>
 <section id="entries" class="panel" hidden><div class="section-title"><p class="label">Your archive, editable</p><h2>Open any entry to change it.</h2></div><div id="entry-list" class="entry-list"></div></section><section id="currently" class="panel" hidden><div class="section-title"><p class="label">Living layer</p><h2>What is true right now?</h2><p>These are allowed to change. The archive does not.</p></div><form id="currently-form" class="snapshot"></form></section><section id="life-list" class="panel" hidden><div class="section-title"><p class="label">A list for a whole life</p><h2>The life list.</h2></div><form id="life-form" class="life-form"><label>Done <textarea name="done" rows="5" placeholder="One thing per line"></textarea></label><label>Next <textarea name="next" rows="5" placeholder="One thing per line"></textarea></label><label>Someday <textarea name="someday" rows="5" placeholder="One thing per line"></textarea></label><button class="primary">Save life list <b>→</b></button><p class="form-message" role="status"></p></form></section></main><script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>

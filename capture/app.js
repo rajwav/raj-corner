@@ -1778,6 +1778,7 @@ if (!formatToolbar) {
 }
 
 document.addEventListener('selectionchange', () => {
+  if (window.USE_BLOCKNOTE_POC) { formatToolbar.style.display = 'none'; return; }
   if (previewPane.hidden) return;
   const selection = window.getSelection();
   if (selection && !selection.isCollapsed && selection.rangeCount > 0) {
