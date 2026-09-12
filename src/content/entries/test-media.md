@@ -30,14 +30,10 @@ Final paragraph after the video.
 
 i am the best person in th eworld
 
-i am the best person in th eworldi am the best person in th eworldi am the best person in th eworldi am the best person in th eworldi am the best person in th eworldi am the best person in th eworldi am the best person in th eworldi am the best person in th eworldi am the best person in th eworldi am the best person in th eworldi am the best person in th eworld
-
-hbjhjhijkhihi
 
 
-
-![IMG_0740.JPG](/uploads/1789196513655-img-0740.jpg "w=34%")
+![IMG_0740.JPG](/uploads/1789197115538-img-0740.jpg "w=23%")
 
 
 
-<video controls preload="metadata" src="/uploads/1789196534461-img-0728.mov"></video>
+![IMG_0728.MOV](/uploads/1789197132452-img-0728.mov)

@@ -1,0 +1,5 @@
+---
+const html = await Astro.slots.render('default');
+const transformed = html.replace(/<img[^>]*src="([^"]+\.(?:mp4|mov|webm|ogg))"[^>]*>/gi, '<video controls preload="metadata" src="$1"></video>');
+---
+<Fragment set:html={transformed} />

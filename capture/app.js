@@ -373,9 +373,6 @@ async function collectCurrentEntryState() {
   // Inject per-image width/alignment metadata into the markdown title fields
   blocknoteMd = injectImageMetadata(blocknoteMd);
 
-  // Convert video links to actual HTML video tags so Astro renders them natively
-  blocknoteMd = blocknoteMd.replace(/!\[([^\]]*)\]\(([^)]+\.(?:mp4|mov|webm|ogg))(?:\s+["'][^"']*["'])?\)/gi, '<video controls preload="metadata" src="$2"></video>');
-
 
   const tags = [];
   form.querySelectorAll('input[name="tags"]:checked').forEach(x => tags.push(x.value));
@@ -501,7 +498,7 @@ $('#cancel').onclick=()=>{show('entries');document.querySelectorAll('.types butt
 $('#delete').onclick=async()=>{const id=$('#entry-form').elements.existingId.value;if(!id)return;if(!confirm('Move this entry to the local .trash folder? You can restore it manually if needed.'))return;try{await request(`/api/entry/${encodeURIComponent(id)}`,{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({confirm:true})});$('#entry-form').hidden=true;await loadEntries();show('entries');}catch(error){$('#message').textContent=error.message}};
 function renderEntryList(){const box=$('#entry-list');box.innerHTML=entries.sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(e=>`<button data-id="${esc(e.id)}"><span>${esc(e.type)}</span><strong>${esc(e.title)}</strong><small>${esc(e.location||e.date||'undated')}</small><b>↗</b></button>`).join('')||'<p>Nothing saved yet. Capture the first thing.</p>';box.querySelectorAll('button').forEach(button=>button.onclick=()=>editEntry(button.dataset.id));}
 async function editEntry(id, mode = 'setup'){const entry=await request(`/api/entry/${encodeURIComponent(id)}`);activeType=entry.data.type;
-  const form=$('#entry-form');form.hidden=false;form.elements.existingId.value=id;form.elements.title.value=entry.data.title||'';form.elements.date.value=(entry.data.date||'').slice(0,10);form.elements.location.value=entry.data.location||'';let restoredStory = (entry.story||'').replace(/<video[^>]*src="([^"]+)"[^>]*><\/video>/gi, '![Video]($1)');form.elements.story.value=restoredStory;if(form.elements.description)form.elements.description.value=entry.data.description||'';form.elements.people.value=(entry.data.people||[]).join(', ');form.elements.cover.value=entry.data.cover||'';if(form.elements.presentation) {
+  const form=$('#entry-form');form.hidden=false;form.elements.existingId.value=id;form.elements.title.value=entry.data.title||'';form.elements.date.value=(entry.data.date||'').slice(0,10);form.elements.location.value=entry.data.location||'';form.elements.story.value=entry.story||'';if(form.elements.description)form.elements.description.value=entry.data.description||'';form.elements.people.value=(entry.data.people||[]).join(', ');form.elements.cover.value=entry.data.cover||'';if(form.elements.presentation) {
   form.elements.presentation.value=JSON.stringify(entry.data.presentation||{});
   layoutSelect.value = (entry.data.presentation && entry.data.presentation.layout && entry.data.presentation.layout.mode) ? entry.data.presentation.layout.mode : 'default';
 }form.elements.newTag.value='';$('#image-status').textContent=entry.data.cover?`Attached: ${entry.data.cover}`:'Optional. It will be saved locally with the project.';setupForm(activeType,{...entry.data,id});$('#delete').hidden=false;document.querySelectorAll('.types button').forEach(x=>x.classList.toggle('selected',x.dataset.type===activeType)); window.USE_BLOCKNOTE_POC = true; document.getElementById('type-select').value = activeType; document.getElementById('world-display').value = typeWorld[activeType] || 'Life';

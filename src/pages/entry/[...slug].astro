@@ -1,5 +1,6 @@
 ---
-import { getCollection, render } from 'astro:content';
+import { getCollection, render } from "astro:content";
+import MediaTransform from "../../components/MediaTransform.astro";
 import Base from '../../layouts/Base.astro';
 import { niceDate, placeSlug, worldForType } from '../../lib/universe';
 import { parseMentionsInText } from '../../lib/mentions';
@@ -108,7 +109,7 @@ if (entry.data.type === 'person') {
     <div set:html={renderEntryCover(entry.data, entry.data.type === 'person', niceDate(entry.data.date))} />
 
     <div class={`artifact-body ${entry.data.type === 'person' ? 'person-body' : ''}`}>
-      <div class="prose"><Content /></div>
+      <div class="prose"><MediaTransform><Content /></MediaTransform></div>
       <div set:html={renderEntryTags(entry.data.tags)} />
     </div>
     
