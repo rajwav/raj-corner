@@ -1318,10 +1318,22 @@ function restoreSnapshot(index) {
 window.restoreSnapshot = restoreSnapshot;
 
 function undo() {
-  if (historyIndex > 0) restoreSnapshot(historyIndex - 1);
+  if (window.USE_BLOCKNOTE_POC && window.BlockNotePOCModule && window.BlockNotePOCModule.isBlockNoteReady()) {
+    // Delegate to BlockNote's native ProseMirror undo history
+    window.BlockNotePOCModule.undoStory();
+    window.markDirty();
+  } else {
+    if (historyIndex > 0) restoreSnapshot(historyIndex - 1);
+  }
 }
 function redo() {
-  if (historyIndex < historyStack.length - 1) restoreSnapshot(historyIndex + 1);
+  if (window.USE_BLOCKNOTE_POC && window.BlockNotePOCModule && window.BlockNotePOCModule.isBlockNoteReady()) {
+    // Delegate to BlockNote's native ProseMirror redo history
+    window.BlockNotePOCModule.redoStory();
+    window.markDirty();
+  } else {
+    if (historyIndex < historyStack.length - 1) restoreSnapshot(historyIndex + 1);
+  }
 }
 
 window.undo = undo;
@@ -1332,6 +1344,20 @@ if (btnRedo) btnRedo.onclick = redo;
 
 function updateHistoryUI() {
   if (!btnUndo) return;
+
+  if (window.USE_BLOCKNOTE_POC) {
+    // BlockNote manages its own undo/redo history internally.
+    // We cannot cheaply query ProseMirror's can().undo() here, so keep buttons always enabled.
+    // The dirty indicator is already managed by markDirty() / setDirty() via the BlockNote onChange callback.
+    btnUndo.disabled = false;
+    btnRedo.disabled = false;
+    if (historyPanel && historyPanel.style.display !== 'none') {
+      renderHistoryPanel();
+    }
+    return;
+  }
+
+  // Non-BlockNote mode: use snapshot-based enable/disable
   btnUndo.disabled = historyIndex <= 0;
   btnRedo.disabled = historyIndex >= historyStack.length - 1;
   
@@ -1369,20 +1395,33 @@ if (btnHistory) {
 }
 
 document.addEventListener('keydown', (e) => {
-  if (typeof previewPane !== 'undefined' && previewPane.hidden) return; // Only if editor is active
-  
+  if (typeof previewPane !== 'undefined' && previewPane.hidden) return; // only when editor pane is open
+
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   const mod = isMac ? e.metaKey : e.ctrlKey;
-  
-  if (mod && e.key.toLowerCase() === 'z') {
-    e.preventDefault();
-    if (e.shiftKey) redo();
-    else undo();
-  } else if (mod && e.key.toLowerCase() === 'y') {
-    e.preventDefault();
-    redo();
-  }
+  if (!mod) return;
+
+  const key = e.key.toLowerCase();
+  const isUndo = key === 'z' && !e.shiftKey;
+  const isRedo = (key === 'z' && e.shiftKey) || key === 'y';
+  if (!isUndo && !isRedo) return;
+
+  // 1. If focus is inside a native form input, let the browser handle it (textarea/input undo works natively).
+  const active = document.activeElement;
+  if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) return;
+
+  // 2. If focus is inside the BlockNote editor container, let ProseMirror handle Cmd+Z natively.
+  //    Do NOT call preventDefault — that would prevent BlockNote from receiving the event.
+  const blocknoteContainer = document.getElementById('blocknote-container');
+  if (blocknoteContainer && blocknoteContainer.contains(active)) return;
+
+  // 3. Focus is on a toolbar button or elsewhere: route to our undo/redo.
+  //    When BlockNote is active these delegate to BlockNote's undoStory()/redoStory().
+  e.preventDefault();
+  if (isRedo) redo();
+  else undo();
 });
+
 
 
 // ==========================================
