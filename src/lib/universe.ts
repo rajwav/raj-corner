@@ -11,11 +11,12 @@ export const worlds = [
 
 const typeWorld: Record<string, string> = {
   memory:'life', person:'life', milestone:'life', dream:'life', goal:'life', note:'life',
-  travel:'travel', place:'travel', photo:'travel',
+  travel:'travel', trip:'travel', place:'travel', photo:'travel',
   car:'interests', music:'interests', book:'interests', movie:'interests', anime:'interests', space:'interests', chess:'interests', collection:'interests',
   experiment:'making', project:'making', idea:'making', thought:'making',
 };
 export const worldForType = (type: string) => typeWorld[type] ?? 'archive';
+export const entryWorld = (entry: any) => entry?.data?.world || entry?.world || (entry?.data?.type ? worldForType(entry.data.type) : (entry?.type ? worldForType(entry.type) : 'archive'));
 export const placeSlug = (place: string) => place.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
 export async function entries() { return (await getCollection('entries')).sort((a,b) => Number(b.data.date ?? 0) - Number(a.data.date ?? 0)); }

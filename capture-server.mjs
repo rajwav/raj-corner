@@ -1,7 +1,12 @@
 import http from 'node:http';
 import { promises as fs } from 'node:fs';
+import nodeFs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const entriesDir = path.join(root, 'src/content/entries');
@@ -11,11 +16,11 @@ const publicUploads = path.join(root, 'public/uploads');
 const trashDir = path.join(root, '.trash');
 const currentlyFile = path.join(root, 'src/content/currently/now.md');
 const lifeListFile = path.join(root, 'src/content/lifeLists/life-list.md');
-const types = ['person','memory','travel','photo','car','music','thought','idea','experiment','place','milestone','dream'];
-const accents = { memory:'sand', travel:'coral', photo:'sky', car:'sky', music:'lime', thought:'lime', idea:'lime', experiment:'sky', place:'coral', milestone:'sand', dream:'night' };
+const types = ['person','memory','travel','trip','photo','car','music','thought','idea','experiment','place','milestone','dream'];
+const accents = { memory:'sand', travel:'coral', trip:'coral', photo:'sky', car:'sky', music:'lime', thought:'lime', idea:'lime', experiment:'sky', place:'coral', milestone:'sand', dream:'night' };
 
-const json = (res, status, value) => { res.writeHead(status, { 'content-type':'application/json; charset=utf-8' }); res.end(JSON.stringify(value)); };
-const text = (res, status, value, type='text/html; charset=utf-8') => { res.writeHead(status, { 'content-type':type }); res.end(value); };
+const json = (res, status, value) => { res.writeHead(status, { 'content-type':'application/json; charset=utf-8', 'cache-control': 'no-cache, no-store, must-revalidate' }); res.end(JSON.stringify(value)); };
+const text = (res, status, value, type='text/html; charset=utf-8') => { res.writeHead(status, { 'content-type':type, 'cache-control': 'no-cache, no-store, must-revalidate' }); res.end(value); };
 const slugify = (value) => value.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'') || 'untitled';
 const safeName = (value) => value.replace(/[^a-zA-Z0-9._-]/g,'-');
 const escapeYaml = (value='') => JSON.stringify(String(value));
@@ -29,11 +34,11 @@ const mediaTypes = {
 const extensionByMime = { 'image/jpeg':'jpg', 'image/png':'png', 'image/gif':'gif', 'image/webp':'webp', 'audio/mpeg':'mp3', 'audio/mp4':'m4a', 'audio/ogg':'ogg', 'audio/wav':'wav', 'audio/webm':'webm', 'video/mp4':'mp4', 'video/webm':'webm', 'video/ogg':'ogv', 'video/quicktime':'mov' };
 const mimeByExtension = Object.fromEntries(Object.entries(extensionByMime).map(([mime, ext]) => [ext, mime]));
 
-async function body(req, limit = 35 * 1024 * 1024) {
+async function body(req, limit = 500 * 1024 * 1024) {
   let raw = '';
   for await (const chunk of req) {
     raw += chunk;
-    if (raw.length > limit) throw Object.assign(new Error('Upload is too large (maximum 25 MB).'), { status: 413 });
+    if (raw.length > limit) throw Object.assign(new Error('Upload is too large (maximum 500 MB).'), { status: 413 });
   }
   return raw ? JSON.parse(raw) : {};
 }
@@ -44,7 +49,7 @@ function decodeUpload(data) {
   const kind = Object.entries(mediaTypes).find(([, allowed]) => allowed.has(mime))?.[0];
   if (!kind || (data.type && data.type.toLowerCase() !== mime)) throw Object.assign(new Error('Only supported image, audio, or video formats can be uploaded.'), { status: 415 });
   const bytes = Buffer.from(hit[2], 'base64');
-  if (!bytes.length || bytes.length > 25 * 1024 * 1024) throw Object.assign(new Error('Upload is too large (maximum 25 MB).'), { status: 413 });
+  if (!bytes.length || bytes.length > 500 * 1024 * 1024) throw Object.assign(new Error('Upload is too large (maximum 500 MB).'), { status: 413 });
   return { bytes, kind, ext: extensionByMime[mime] };
 }
 async function walk(dir) { const files = await fs.readdir(dir, { withFileTypes:true }); return (await Promise.all(files.map(file => file.isDirectory() ? walk(path.join(dir,file.name)) : [path.join(dir,file.name)]))).flat(); }
@@ -56,7 +61,7 @@ function parseFrontmatter(raw) {
 }
 function markdown(data) {
   const front = [
-    `title: ${escapeYaml(data.title)}`, `type: ${data.type}`, data.date ? `date: ${data.date}` : '', data.location ? `location: ${escapeYaml(data.location)}` : '',
+    `title: ${escapeYaml(data.title)}`, `type: ${data.type}`, data.world ? `world: ${data.world}` : '', data.date ? `date: ${data.date}` : '', data.location ? `location: ${escapeYaml(data.location)}` : '',
     `tags: ${list(data.tags)}`, `description: ${escapeYaml(data.description || data.story?.split('\n')[0] || data.title)}`,
     `related: ${list(data.related)}`, data.people?.length ? `people: ${list(data.people)}` : '', data.cover ? `cover: ${escapeYaml(data.cover)}` : '',
     `status: ${data.status || 'past'}`, `featured: ${Boolean(data.featured)}`, `accent: ${accents[data.type] || 'sand'}`,
@@ -71,6 +76,100 @@ async function uniqueFile(id, existingId) { const target=path.join(entriesDir, `
 async function readSimple(file) { try { return parseFrontmatter(await fs.readFile(file,'utf8')).data; } catch { return {}; } }
 async function writeSimple(file, data, body='') { await fs.mkdir(path.dirname(file),{recursive:true}); const lines=Object.entries(data).map(([key,value])=>`${key}: ${Array.isArray(value)?list(value):escapeYaml(value)}`); await fs.writeFile(file,`---\n${lines.join('\n')}\n---\n\n${body}\n`); }
 
+
+async function readJson(file) { try { return JSON.parse(await fs.readFile(file, 'utf8')); } catch { return {}; } }
+async function writeJson(file, data) { await fs.mkdir(path.dirname(file), { recursive: true }); await fs.writeFile(file, JSON.stringify(data, null, 2)); }
+const rhythmHabitsFile = path.join(root, 'src/content/rhythm/habits.json');
+const rhythmRecordsFile = path.join(root, 'src/content/rhythm/records.json');
+
+async function serveMediaFile(req, res, filePath, contentType) {
+  try {
+    let stat;
+    try {
+      stat = await fs.stat(filePath);
+    } catch {
+      // If .mov requested and .mp4 exists, fallback to .mp4
+      if (filePath.endsWith('.mov')) {
+        const mp4Path = filePath.slice(0, -4) + '.mp4';
+        try {
+          stat = await fs.stat(mp4Path);
+          filePath = mp4Path;
+          contentType = 'video/mp4';
+        } catch {
+          return text(res, 404, 'File not found', 'text/plain');
+        }
+      } else {
+        return text(res, 404, 'File not found', 'text/plain');
+      }
+    }
+
+    const fileSize = stat.size;
+    const range = req.headers.range;
+
+    // Handle HEAD request
+    if (req.method === 'HEAD') {
+      res.writeHead(200, {
+        'content-type': contentType,
+        'content-length': fileSize,
+        'accept-ranges': 'bytes',
+        'cache-control': 'public, max-age=86400',
+      });
+      return res.end();
+    }
+
+    // Handle HTTP Range request (206 Partial Content)
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+      if (isNaN(start) || start >= fileSize || (parts[1] && (isNaN(end) || end < start))) {
+        res.writeHead(416, {
+          'content-range': `bytes */${fileSize}`,
+          'content-type': 'text/plain',
+        });
+        return res.end('Requested range not satisfiable');
+      }
+
+      const effectiveEnd = Math.min(end, fileSize - 1);
+      const chunkSize = (effectiveEnd - start) + 1;
+      const stream = nodeFs.createReadStream(filePath, { start, end: effectiveEnd });
+
+      res.writeHead(206, {
+        'content-range': `bytes ${start}-${effectiveEnd}/${fileSize}`,
+        'accept-ranges': 'bytes',
+        'content-length': chunkSize,
+        'content-type': contentType,
+        'cache-control': 'public, max-age=86400',
+      });
+
+      stream.pipe(res);
+      stream.on('error', () => {
+        if (!res.headersSent) { res.writeHead(500); res.end(); }
+      });
+    } else {
+      res.writeHead(200, {
+        'content-length': fileSize,
+        'content-type': contentType,
+        'accept-ranges': 'bytes',
+        'cache-control': 'public, max-age=86400',
+      });
+
+      const stream = nodeFs.createReadStream(filePath);
+      stream.pipe(res);
+      stream.on('error', () => {
+        if (!res.headersSent) { res.writeHead(500); res.end(); }
+      });
+    }
+  } catch (err) {
+    console.error('serveMediaFile error:', err);
+    if (!res.headersSent) {
+      res.writeHead(500, { 'content-type': 'text/plain' });
+      res.end('Internal server error');
+    }
+  }
+}
+
 const server=http.createServer(async (req,res)=>{
   try {
     const url=new URL(req.url, 'http://localhost');
@@ -81,12 +180,13 @@ const server=http.createServer(async (req,res)=>{
     if (req.method==='GET' && url.pathname==='/style.css') return text(res,200,await fs.readFile(path.join(captureDir,'style.css'),'utf8'),'text/css; charset=utf-8');
     if (req.method==='GET' && url.pathname==='/global.css') return text(res,200,await fs.readFile(path.join(root,'src/styles/global.css'),'utf8'),'text/css; charset=utf-8');
     if (req.method==='GET' && url.pathname==='/lib/entryTemplate.js') return text(res,200,await fs.readFile(path.join(root,'src/lib/entryTemplate.js'),'utf8'),'text/javascript; charset=utf-8');
-    if (req.method==='GET' && (url.pathname.startsWith('/uploads/') || url.pathname.startsWith('/images/'))) {
+    if (req.method==='GET' && url.pathname==='/lib/photoStack.js') return text(res,200,await fs.readFile(path.join(root,'src/lib/photoStack.js'),'utf8'),'text/javascript; charset=utf-8');
+    if ((req.method==='GET' || req.method==='HEAD') && (url.pathname.startsWith('/uploads/') || url.pathname.startsWith('/images/'))) {
       const name = path.basename(decodeURIComponent(url.pathname));
       const directory = url.pathname.startsWith('/uploads/') ? publicUploads : publicImages;
       const file = path.join(directory, name);
       const ext = path.extname(name).slice(1).toLowerCase();
-      return text(res, 200, await fs.readFile(file), mimeByExtension[ext] || 'application/octet-stream');
+      return serveMediaFile(req, res, file, mimeByExtension[ext] || 'application/octet-stream');
     }
     if (req.method==='GET' && url.pathname==='/api/entries') return json(res,200,await readEntries());
     if (req.method==='GET' && url.pathname.startsWith('/api/entry/')) { const id=decodeURIComponent(url.pathname.slice(11)); const found=(await readEntries(true)).find(entry=>entry.id===id); return found?json(res,200,found):json(res,404,{error:'Entry not found'}); }
@@ -101,18 +201,114 @@ const server=http.createServer(async (req,res)=>{
       await fs.writeFile(path.join(publicImages,name),upload.bytes);
       return json(res,200,{url:`/images/${name}`});
     }
+    if (req.method==='POST' && url.pathname==='/api/upload-raw') {
+      const origName = decodeURIComponent(url.searchParams.get('name') || 'upload');
+      const rawExt = path.extname(origName).slice(1).toLowerCase();
+      const ext = rawExt || (req.headers['content-type'] ? extensionByMime[req.headers['content-type'].toLowerCase()] : '') || 'bin';
+      const kind = Object.entries(mediaTypes).find(([, set]) => set.has(req.headers['content-type']?.toLowerCase()))?.[0] || (['mp4','mov','webm','ogg'].includes(ext) ? 'video' : 'media');
+      let name = `${Date.now()}-${safeName(slugify(origName.replace(/\.[^.]+$/, '')))}.${ext}`;
+      const filePath = path.join(publicUploads, name);
+      await fs.mkdir(publicUploads, { recursive: true });
+
+      const writeStream = nodeFs.createWriteStream(filePath);
+      await new Promise((resolve, reject) => {
+        req.pipe(writeStream);
+        req.on('error', reject);
+        writeStream.on('finish', resolve);
+        writeStream.on('error', reject);
+      });
+
+      if ((kind === 'video' || ext === 'mov') && ext !== 'mp4') {
+        const mp4Name = `${Date.now()}-${safeName(slugify(origName.replace(/\.[^.]+$/, '')))}.mp4`;
+        const mp4Path = path.join(publicUploads, mp4Name);
+        try {
+          await execFileAsync('avconvert', ['-s', filePath, '-p', 'Preset1280x720', '-o', mp4Path, '--replace']);
+          name = mp4Name;
+        } catch (convErr) {
+          console.warn('avconvert transcode warning:', convErr.message);
+        }
+      }
+
+      return json(res, 200, { ok: true, url: `/uploads/${name}`, kind });
+    }
     if (req.method==='POST' && url.pathname==='/api/upload') {
       const data = await body(req);
       const upload = decodeUpload(data);
-      const name = `${Date.now()}-${safeName(slugify((data.name||upload.kind).replace(/\.[^.]+$/,'')))}.${upload.ext}`;
-      await fs.mkdir(publicUploads,{recursive:true});
-      await fs.writeFile(path.join(publicUploads,name),upload.bytes);
-      return json(res,200,{ok:true,url:`/uploads/${name}`,kind:upload.kind});
+      let ext = upload.ext;
+      let name = `${Date.now()}-${safeName(slugify((data.name||upload.kind).replace(/\.[^.]+$/,'')))}.${ext}`;
+      const filePath = path.join(publicUploads, name);
+      await fs.mkdir(publicUploads, { recursive: true });
+      await fs.writeFile(filePath, upload.bytes);
+
+      if (upload.kind === 'video' && ext !== 'mp4') {
+        const mp4Name = `${Date.now()}-${safeName(slugify((data.name||'video').replace(/\.[^.]+$/,'')))}.mp4`;
+        const mp4Path = path.join(publicUploads, mp4Name);
+        try {
+          await execFileAsync('avconvert', ['-s', filePath, '-p', 'Preset1280x720', '-o', mp4Path, '--replace']);
+          name = mp4Name;
+        } catch (convErr) {
+          console.warn('avconvert transcode warning:', convErr.message);
+        }
+      }
+
+      return json(res, 200, { ok: true, url: `/uploads/${name}`, kind: upload.kind });
     }
+    
+    if (req.method==='GET' && url.pathname==='/api/rhythm-presets') {
+      const presets = [
+        { category: "BODY", habits: [ { id: "run", name: "Running", mode: "NUMBER" }, { id: "walk", name: "Walking", mode: "NUMBER" }, { id: "gym", name: "Gym", mode: "CHECKBOX" }, { id: "stretch", name: "Stretching", mode: "CHECKBOX" }, { id: "sports", name: "Sports", mode: "CHECKBOX" } ] },
+        { category: "HEALTH", habits: [ { id: "sleep-7", name: "Sleep 7+ hours", mode: "TIME_TARGET" }, { id: "wake-early", name: "Wake up early", mode: "CHECKBOX" }, { id: "water", name: "Drink enough water", mode: "CHECKBOX" }, { id: "no-junk", name: "No junk food", mode: "CHECKBOX" } ] },
+        { category: "MIND", habits: [ { id: "meditation", name: "Meditation", mode: "CHECKBOX" }, { id: "reading", name: "Reading", mode: "DURATION" }, { id: "journaling", name: "Journaling", mode: "CHECKBOX" }, { id: "no-social", name: "No social media", mode: "CHECKBOX" } ] },
+        { category: "LEARNING", habits: [ { id: "study", name: "Study", mode: "DURATION" }, { id: "dsa", name: "DSA", mode: "CHECKBOX" }, { id: "python", name: "Python", mode: "CHECKBOX" }, { id: "ai-ml", name: "AI / ML", mode: "CHECKBOX" }, { id: "college-work", name: "College work", mode: "CHECKBOX" } ] },
+        { category: "CREATION", habits: [ { id: "build", name: "Build", mode: "CHECKBOX" }, { id: "code", name: "Code", mode: "DURATION" }, { id: "project-work", name: "Project work", mode: "DURATION" }, { id: "side-project", name: "Side project", mode: "CHECKBOX" } ] },
+        { category: "LIFE", habits: [ { id: "piano", name: "Piano", mode: "CHECKBOX" }, { id: "chess", name: "Chess", mode: "NUMBER" }, { id: "friends", name: "Time with friends", mode: "CHECKBOX" } ] },
+        { category: "PERSONAL", habits: [ { id: "x-01", name: "X-01", mode: "NUMBER" } ] }
+      ];
+      return json(res, 200, presets);
+    }
+    
+    if (req.method==='GET' && url.pathname==='/api/rhythm-habits') {
+      const data = await readJson(rhythmHabitsFile);
+      return json(res, 200, { habits: data.habits || [] });
+    }
+    
+    if (req.method==='PUT' && url.pathname==='/api/rhythm-habits') {
+      const data = await body(req);
+      await writeJson(rhythmHabitsFile, { updated: new Date().toISOString().slice(0,10), habits: data.habits || [] });
+      return json(res, 200, { ok: true });
+    }
+
+    if (req.method==='GET' && url.pathname==='/api/rhythm-records') {
+      const data = await readJson(rhythmRecordsFile);
+      return json(res, 200, { records: data.records || {} });
+    }
+
+    if (req.method==='PUT' && url.pathname==='/api/rhythm-records') {
+      const data = await body(req);
+      await writeJson(rhythmRecordsFile, { updated: new Date().toISOString().slice(0,10), records: data.records || {} });
+      return json(res, 200, { ok: true });
+    }
+
     if (req.method==='GET' && url.pathname==='/api/currently') return json(res,200,await readSimple(currentlyFile));
     if (req.method==='PUT' && url.pathname==='/api/currently') { const data=await body(req); await writeSimple(currentlyFile,{...data,updated:new Date().toISOString().slice(0,10)}); return json(res,200,{ok:true}); }
     if (req.method==='GET' && url.pathname==='/api/life-list') { const raw=await fs.readFile(lifeListFile,'utf8'); const parsed=parseFrontmatter(raw).data; if (!Array.isArray(parsed.done)) { const section=(name)=>{const match=raw.match(new RegExp(`${name}:\\n((?:\\s+- .+\\n?)*)`)); return match?[...match[1].matchAll(/- (.+)/g)].map(x=>x[1]):[]}; parsed.done=section('done');parsed.next=section('next');parsed.someday=section('someday'); } return json(res,200,parsed); }
-    if (req.method==='PUT' && url.pathname==='/api/life-list') { const data=await body(req); await writeSimple(lifeListFile,{updated:new Date().toISOString().slice(0,10),done:data.done||[],next:data.next||[],someday:data.someday||[]}); return json(res,200,{ok:true}); }
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      const proxyReq = http.request({
+        hostname: 'localhost',
+        port: 4321,
+        path: req.url,
+        method: req.method,
+        headers: { ...req.headers, host: 'localhost:4321' }
+      }, (proxyRes) => {
+        res.writeHead(proxyRes.statusCode, proxyRes.headers);
+        proxyRes.pipe(res);
+      });
+      proxyReq.on('error', (err) => {
+        text(res, 404, 'Not found', 'text/plain');
+      });
+      req.pipe(proxyReq);
+      return;
+    }
     return text(res,404,'Not found','text/plain');
   } catch (error) { console.error(error); return json(res,error.status || 500,{error:error.message||'Something went wrong'}); }
 });

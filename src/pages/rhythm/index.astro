@@ -1,0 +1,86 @@
+---
+// @ts-nocheck
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import Base from '../../layouts/Base.astro';
+
+let habits = [];
+let records = {};
+
+try {
+  const habitsRaw = await fs.readFile(path.join(process.cwd(), 'src/content/rhythm/habits.json'), 'utf8');
+  habits = JSON.parse(habitsRaw).habits || [];
+} catch (e) {
+  habits = [];
+}
+
+try {
+  const recordsRaw = await fs.readFile(path.join(process.cwd(), 'src/content/rhythm/records.json'), 'utf8');
+  records = JSON.parse(recordsRaw).records || {};
+} catch (e) {
+  records = {};
+}
+
+// Generate calendar structure for the current month
+const currentRhythmDate = new Date();
+const year = currentRhythmDate.getFullYear();
+const month = currentRhythmDate.getMonth();
+const daysInMonth = new Date(year, month + 1, 0).getDate();
+const monthName = currentRhythmDate.toLocaleString('default', { month: 'long', year: 'numeric' }).toUpperCase();
+
+const today = new Date();
+---
+
+<Base title="Rhythm · Raj's Corner">
+  <article class="rhythm-container" style="max-width: 900px; margin: 0 auto; padding: 40px 20px;">
+    <header style="margin-bottom: 48px;">
+      <span style="font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-light); font-size: 11px;">Rhythm</span>
+      <h1 style="font-family: var(--serif); font-weight: 300; font-size: 2.5rem; margin: 8px 0; line-height: 1.1;">Daily Habits.</h1>
+      <p style="color: var(--text-light); max-width: 600px; line-height: 1.6;">A visual record of how I spend my days.</p>
+    </header>
+
+    {habits.length === 0 ? (
+      <p style="color: var(--text-light); font-family: var(--mono);">No habits configured.</p>
+    ) : (
+      <section style="overflow-x: auto; padding-bottom: 24px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; font-family:var(--mono); font-size:12px;">
+          <strong>{monthName}</strong>
+        </div>
+        
+        <div style={`display:grid; grid-template-columns: minmax(120px, max-content) repeat(${daysInMonth}, 24px); gap:4px; align-items:center; font-family:var(--mono); font-size:11px;`}>
+          <!-- Header row -->
+          <div></div>
+          {Array.from({ length: daysInMonth }).map((_, i) => (
+            <div style="text-align:center; color:var(--text-light); opacity:0.6;">{i + 1}</div>
+          ))}
+          
+          <!-- Habit rows -->
+          {habits.filter(h => h.active !== false).map(habit => (
+            <>
+              <div style="text-align:right; padding-right:12px; color:var(--text-light); text-transform:uppercase; letter-spacing:0.05em; white-space:nowrap;" title={habit.name}>
+                {habit.name}
+              </div>
+              {Array.from({ length: daysInMonth }).map((_, i) => {
+                const d = i + 1;
+                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const record = records[dateStr]?.[habit.id];
+                const isCompleted = record && (record.done || record.value > 0);
+                const isToday = (d === today.getDate() && month === today.getMonth() && year === today.getFullYear());
+                
+                let marker = '·';
+                if (isCompleted) marker = '●';
+                
+                let style = 'text-align:center; width:24px; height:24px; display:flex; align-items:center; justify-content:center;';
+                if (isToday) style += ' background:rgba(0,0,0,0.05); border-radius:4px;';
+                if (isCompleted) style += ' color:var(--accent, #e59a72);';
+                else style += ' color:var(--line); opacity:0.6;';
+                
+                return <div style={style} title={dateStr}>{marker}</div>;
+              })}
+            </>
+          ))}
+        </div>
+      </section>
+    )}
+  </article>
+</Base>

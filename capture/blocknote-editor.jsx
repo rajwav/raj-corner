@@ -6,6 +6,20 @@ import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 
 async function uploadMedia(file) {
+  try {
+    const rawRes = await fetch('/api/upload-raw?name=' + encodeURIComponent(file.name), {
+      method: 'POST',
+      headers: { 'content-type': file.type || 'application/octet-stream' },
+      body: file
+    });
+    if (rawRes.ok) {
+      const payload2 = await rawRes.json().catch(() => ({}));
+      if (payload2.url) return payload2.url;
+    }
+  } catch (rawErr) {
+    console.warn('Direct upload fallback', rawErr);
+  }
+
   const dataUrl = await new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
@@ -66,13 +80,18 @@ export function mountBlockNotePOC(containerId, initialMarkdown) {
     currentEditor = null;
   }
   
+  let isReady = false;
   root = createRoot(container);
   root.render(
     <BlockNotePOC 
       initialMarkdown={initialMarkdown} 
       onChange={(ed) => { 
         currentEditor = ed; 
-        if (typeof window.markDirty === 'function') window.markDirty(); 
+        if (isReady) {
+          if (typeof window.markDirty === 'function') window.markDirty(); 
+        } else {
+          isReady = true;
+        }
       }} 
     />
   );
@@ -112,4 +131,39 @@ export function redoStory() {
     return false;
   }
 }
+
+export async function insertMarkdownAtCursor(markdown) {
+  if (!currentEditor) return false;
+  try {
+    const blocks = await currentEditor.tryParseMarkdownToBlocks(markdown);
+    if (!blocks || blocks.length === 0) return false;
+    const currentBlock = currentEditor.getTextCursorPosition()?.block;
+    if (currentBlock) {
+      const isEmpty = Array.isArray(currentBlock.content) && (currentBlock.content.length === 0 || (currentBlock.content.length === 1 && currentBlock.content[0].type === "text" && (!currentBlock.content[0].text || !currentBlock.content[0].text.trim())));
+      if (isEmpty) {
+        currentEditor.replaceBlocks([currentBlock], blocks);
+      } else {
+        currentEditor.insertBlocks(blocks, currentBlock, 'after');
+      }
+    } else {
+      const lastBlock = currentEditor.document[currentEditor.document.length - 1];
+      if (lastBlock) {
+        currentEditor.insertBlocks(blocks, lastBlock, 'after');
+      } else {
+        currentEditor.replaceBlocks(currentEditor.document, blocks);
+      }
+    }
+    const lastInserted = blocks[blocks.length - 1];
+    if (lastInserted) {
+      try {
+        currentEditor.setTextCursorPosition(lastInserted, 'end');
+      } catch (e) {}
+    }
+    return true;
+  } catch (err) {
+    console.error('Failed to insert markdown blocks', err);
+    return false;
+  }
+}
+
 

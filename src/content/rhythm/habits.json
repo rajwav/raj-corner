@@ -1,0 +1,40 @@
+{
+  "updated": "2026-09-12",
+  "habits": [
+    {
+      "id": "run",
+      "name": "Running",
+      "mode": "NUMBER",
+      "category": "BODY",
+      "active": true
+    },
+    {
+      "id": "gym",
+      "name": "Gym",
+      "mode": "CHECKBOX",
+      "category": "BODY",
+      "active": true
+    },
+    {
+      "id": "sleep-7",
+      "name": "Sleep 7+ hours",
+      "mode": "TIME_TARGET",
+      "category": "HEALTH",
+      "active": true
+    },
+    {
+      "id": "dsa",
+      "name": "DSA",
+      "mode": "CHECKBOX",
+      "category": "LEARNING",
+      "active": true
+    },
+    {
+      "id": "x-01",
+      "name": "X-01",
+      "mode": "NUMBER",
+      "category": "PERSONAL",
+      "active": true
+    }
+  ]
+}

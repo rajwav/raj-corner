@@ -2,7 +2,7 @@
 import { getCollection, render } from "astro:content";
 import MediaTransform from "../../components/MediaTransform.astro";
 import Base from '../../layouts/Base.astro';
-import { niceDate, placeSlug, worldForType } from '../../lib/universe';
+import { niceDate, placeSlug, entryWorld } from '../../lib/universe';
 import { parseMentionsInText } from '../../lib/mentions';
 import { renderEntryHeader, renderEntryCover, renderEntryTags, renderPersonTraces, renderContinuation, getPresentationClasses } from '../../lib/entryTemplate.js';
 
@@ -105,7 +105,7 @@ if (entry.data.type === 'person') {
 ---
 <Base title={`${entry.data.title} · Raj's Corner`}>
     <article class={`artifact-page ${entry.data.accent} ${entry.data.type === 'person' ? 'person-artifact' : ''} ${getPresentationClasses(entry.data.presentation)}`}>
-    <div set:html={renderEntryHeader(entry.data, entry.data.type === 'person', niceDate(entry.data.date), placeSlug(entry.data.location || ''), worldForType(entry.data.type))} />
+    <div set:html={renderEntryHeader(entry.data, entry.data.type === 'person', niceDate(entry.data.date), placeSlug(entry.data.location || ''), entryWorld(entry))} />
     <div set:html={renderEntryCover(entry.data, entry.data.type === 'person', niceDate(entry.data.date))} />
 
     <div class={`artifact-body ${entry.data.type === 'person' ? 'person-body' : ''}`}>
@@ -119,23 +119,24 @@ if (entry.data.type === 'person') {
 <div set:html={renderContinuation(curatedThreads)} />
 
 <script>
+  import { initPhotoStacks } from '../../lib/photoStack.js';
+
+  // ─── Initialize photo stacks ───────────────────────────────────────────────
+  initPhotoStacks();
+  document.addEventListener('astro:page-load', () => initPhotoStacks());
+
   // ─── Public entry page: media rendering ────────────────────────────────────
 
-  // 1. VIDEO / AUDIO — ensure controls and responsive sizing
+  // 1. VIDEO / AUDIO — ensure controls, playsinline, and responsive sizing
   document.querySelectorAll<HTMLVideoElement>('.prose video').forEach((vid) => {
     if (!vid.hasAttribute('controls')) vid.setAttribute('controls', '');
     if (!vid.hasAttribute('preload')) vid.setAttribute('preload', 'metadata');
+    if (!vid.hasAttribute('playsinline')) vid.setAttribute('playsinline', '');
     vid.style.maxWidth = '100%';
     vid.style.height = 'auto';
-    vid.style.display = 'block';
-    vid.style.margin = '1.5em 0';
-    // If src is on the element directly (not via <source>), ensure a <source> child exists
-    const src = vid.getAttribute('src');
-    if (src && !vid.querySelector('source')) {
-      const s = document.createElement('source');
-      s.src = src;
-      vid.removeAttribute('src');
-      vid.appendChild(s);
+    if (!vid.closest('.story-video-container')) {
+      vid.style.display = 'block';
+      vid.style.margin = '1.5em 0';
     }
   });
 
@@ -148,7 +149,7 @@ if (entry.data.type === 'person') {
 
   // 2. IMAGES — read title="w=50%,a=center" and apply width + alignment
   document.querySelectorAll<HTMLImageElement>('.prose img').forEach((img) => {
-    if (img.closest('figure')) return; // already wrapped
+    if (img.closest('figure') || img.closest('.photo-stack-container')) return; // already wrapped or in a photo stack
 
     const title = img.getAttribute('title') || '';
 

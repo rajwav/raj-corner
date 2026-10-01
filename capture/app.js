@@ -1,10 +1,11 @@
 import { renderEntryHeader, renderEntryCover, renderEntryTags, renderPersonTraces, renderContinuation, getPresentationClasses } from '/lib/entryTemplate.js';
+import { transformPhotoStacks, initPhotoStacks, renderPhotoStackHtml } from '/lib/photoStack.js';
 const $ = (selector) => document.querySelector(selector);
 const typeWorld = {
-  memory:'Life', person:'Life', milestone:'Life', dream:'Life', goal:'Life', note:'Life',
-  travel:'Travel', place:'Travel', photo:'Travel', trip:'Travel',
-  car:'Interests', music:'Interests', book:'Interests', movie:'Interests', anime:'Interests', space:'Interests', chess:'Interests', collection:'Interests',
-  experiment:'Making', project:'Making', idea:'Making', thought:'Making',
+  memory:'life', person:'life', milestone:'life', dream:'life', goal:'life', note:'life',
+  travel:'travel', trip:'travel', place:'travel', photo:'travel',
+  car:'interests', music:'interests', book:'interests', movie:'interests', anime:'interests', space:'interests', chess:'interests', collection:'interests',
+  experiment:'making', project:'making', idea:'making', thought:'making',
 };
 
 window.goToSetup = async function() {
@@ -12,8 +13,8 @@ window.goToSetup = async function() {
     const md = await window.BlockNotePOCModule.getBlockNoteMarkdown();
     document.forms['entry-form'].elements.story.value = md;
   }
-  const typeStr = document.getElementById('type-select').value;
-  document.getElementById('world-display').value = typeWorld[typeStr] || 'Life';
+  const typeStr = document.getElementById('type-select')?.value;
+  if (typeStr) activeType = typeStr;
   
   const id = document.forms['entry-form'].elements.existingId.value || 'new';
   location.hash = '/setup/' + id;
@@ -27,13 +28,36 @@ window.goToEditor = function() {
 document.getElementById('btn-continue-editor')?.addEventListener('click', window.goToEditor);
 document.getElementById('btn-back-setup')?.addEventListener('click', window.goToSetup);
 document.getElementById('type-select')?.addEventListener('change', (e) => {
-  document.getElementById('world-display').value = typeWorld[e.target.value] || 'Life';
+  activeType = e.target.value;
+  const worldSelect = document.getElementById('world-select');
+  if (worldSelect) {
+    worldSelect.value = typeWorld[activeType] || 'life';
+  }
+  setupForm(activeType);
+  if (typeof window.markDirty === 'function') window.markDirty();
+});
+document.getElementById('world-select')?.addEventListener('change', () => {
+  if (typeof window.markDirty === 'function') window.markDirty();
 });
 document.getElementById('btn-settings')?.addEventListener('click', () => {
   const panel = document.getElementById('page-settings-panel');
   panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
 });
-const types = {memory:['A small thing worth keeping.','What do you want future-you to remember?'],travel:['A road, a day, a place.','Start with the part that surprised you.'],photo:['A frame with a story.','What happened around this photograph?'],car:['Why this one?','The reason it matters more than the specifications.'],music:['A song attached to a time.','What does this sound bring back?'],thought:['A thought before it disappears.','Write it down without trying to finish it.'],idea:['An unfinished idea.','What is the spark?'],experiment:['Something you tried.','What happened, or what are you trying next?'],place:['A place worth pinning.','Why does this place belong in your world?'],milestone:['A marker in time.','What changed?'],dream:['Something waiting in the distance.','Why does this matter to you?'],person:['Someone who mattered.','What do you want to remember about them?']};
+const types = {
+  memory:['A small thing worth keeping.','What do you want future-you to remember?'],
+  trip:['A journey, a road, a day away.','What happened on the way?'],
+  travel:['A road, a day, a place.','Start with the part that surprised you.'],
+  photo:['A frame with a story.','What happened around this photograph?'],
+  car:['Why this one?','The reason it matters more than the specifications.'],
+  music:['A song attached to a time.','What does this sound bring back?'],
+  thought:['A thought before it disappears.','Write it down without trying to finish it.'],
+  idea:['An unfinished idea.','What is the spark?'],
+  experiment:['Something you tried.','What happened, or what are you trying next?'],
+  place:['A place worth pinning.','Why does this place belong in your world?'],
+  milestone:['A marker in time.','What changed?'],
+  dream:['Something waiting in the distance.','Why does this matter to you?'],
+  person:['Someone who mattered.','What do you want to remember about them?']
+};
 
 window.isDirty = false;
 // Per-image presentation metadata: url → { width: '50%', align: 'center' }
@@ -71,12 +95,16 @@ async function route() {
   const form = document.getElementById('entry-form');
   try {
     if (hash === '/setup/new') {
-      if (!window.USE_BLOCKNOTE_POC) initializeNewEntry('memory');
+      if (form.elements.existingId.value !== '' || !activeType) {
+        initializeNewEntry('memory');
+      }
       show('capture');
       return;
     }
     if (hash === '/editor/new') {
-      if (!window.USE_BLOCKNOTE_POC) initializeNewEntry('memory');
+      if (form.elements.existingId.value !== '' || !activeType) {
+        initializeNewEntry('memory');
+      }
       show('preview-pane');
       updatePreview();
       return;
@@ -94,6 +122,7 @@ async function route() {
     if (hash === '/entries') return show('entries');
     if (hash === '/currently') return show('currently');
     if (hash === '/life-list') return show('life-list');
+    if (hash === '/rhythm') { loadRhythm(); return show('rhythm'); }
     show('home');
   } catch (error) {
     console.error('Capture route failed:', error);
@@ -142,8 +171,11 @@ document.querySelectorAll('[data-go]').forEach(button => {
     }
     
     if (go === 'capture') {
-       const id = document.getElementById('entry-form').elements.existingId.value || 'new';
-       location.hash = '/setup/' + id;
+       const form = document.getElementById('entry-form');
+       if (form && form.elements.existingId.value) {
+         initializeNewEntry('memory');
+       }
+       location.hash = '/setup/new';
     } else if (go === 'entries') {
        location.hash = '/entries';
     } else {
@@ -160,21 +192,36 @@ if (pList) {
 }
 }
 function renderTypeButtons(){const box=$('#types');if(box){box.innerHTML=Object.entries(types).map(([id,[name]])=>`<button type="button" data-type="${id}">${name}</button>`).join('');box.querySelectorAll('button').forEach(button=>button.onclick=()=>newEntry(button.dataset.type));}}
-function initializeNewEntry(type){
+function initializeNewEntry(type = 'memory'){
   window.imageMetadata = new Map(); // clear per-image metadata for fresh entry
-  activeType=type;const form=$('#entry-form');form.reset();form.elements.existingId.value='';if(form.elements.description)form.elements.description.value='';form.elements.date.value=today();form.elements.cover.value='';if(form.elements.presentation)form.elements.presentation.value='{}';
-  document.getElementById('type-select').value = type;
-  document.getElementById('world-display').value = typeWorld[type] || 'Life';
+  activeType=type;const form=$('#entry-form');form.reset();
+  form.elements.existingId.value='';
+  if(form.elements.title)form.elements.title.value='';
+  if(form.elements.description)form.elements.description.value='';
+  if(form.elements.story)form.elements.story.value='';
+  if(form.elements.location)form.elements.location.value='';
+  if(form.elements.people)form.elements.people.value='';
+  if(form.elements.newTag)form.elements.newTag.value='';
+  form.elements.date.value=today();
+  form.elements.cover.value='';
+  if(form.elements.presentation)form.elements.presentation.value='{}';
+  storyBlocks = [];
+  if (window.BlockNotePOCModule && typeof window.BlockNotePOCModule.unmountBlockNotePOC === 'function') {
+    window.BlockNotePOCModule.unmountBlockNotePOC('blocknote-container');
+  }
+  if (document.getElementById('type-select')) document.getElementById('type-select').value = type;
+  if (document.getElementById('world-select')) document.getElementById('world-select').value = typeWorld[type] || 'life';
   window.USE_BLOCKNOTE_POC = true;
   $('#image-status').textContent='Optional. It will be saved locally with the project.';$('#delete').hidden=true;setupForm(type);form.hidden=false;document.querySelectorAll('.types button').forEach(x=>x.classList.toggle('selected',x.dataset.type===type));
-  setTimeout(() => { historyStack = []; historyIndex = -1; captureSnapshot('New entry'); savedStateStr = JSON.stringify(historyStack[0].state); updateHistoryUI(); }, 50);
+  if (typeof window.setDirty === 'function') window.setDirty(false);
+  setTimeout(() => { historyStack = []; historyIndex = -1; captureSnapshot('New entry'); savedStateStr = JSON.stringify(historyStack[0]?.state || {}); updateHistoryUI(); }, 50);
 }
 function newEntry(type) {
   initializeNewEntry(type);
   location.hash = '/setup/new';
 }
 function setupForm(type,data={}){ if (typeof previewBtn !== 'undefined' && previewBtn) previewBtn.hidden = false; 
-  const [heading,prompt]=types[type];
+  const [heading,prompt]=types[type] || types['memory'];
   if ($('#type-label')) $('#type-label').textContent=type;
   if ($('#form-title')) $('#form-title').textContent=heading;
   
@@ -242,6 +289,103 @@ function injectImageMetadata(md) {
   });
 }
 
+// ==========================================
+// PHOTO STACK CANVAS SELECTION STATE
+// ==========================================
+const selectedCanvasPhotos = new Map(); // key: src, value: { url, caption, name, blockId, wrapper, btn }
+
+function updateAllStackButtons() {
+  const count = selectedCanvasPhotos.size;
+  document.querySelectorAll('.rc-direct-stack-btn').forEach(btn => {
+    if (count >= 2) {
+      btn.style.display = 'inline-flex';
+      btn.textContent = `⚡ Make Stack (${count})`;
+    } else {
+      btn.style.display = 'none';
+    }
+  });
+}
+
+function updateCanvasPhotoStackBar() {
+  const bar = document.getElementById('canvas-photo-stack-bar');
+  const countEl = document.getElementById('canvas-photo-stack-count');
+  if (!bar) return;
+  const count = selectedCanvasPhotos.size;
+  if (count > 0) {
+    if (countEl) countEl.textContent = `${count} photo${count > 1 ? 's' : ''} selected`;
+    bar.style.display = 'inline-flex';
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+function clearCanvasPhotoSelection() {
+  selectedCanvasPhotos.forEach((item) => {
+    if (item.wrapper) item.wrapper.classList.remove('rc-photo-selected');
+    if (item.btn) {
+      item.btn.classList.remove('is-selected');
+      item.btn.innerHTML = '🎴 Stack';
+    }
+  });
+  selectedCanvasPhotos.clear();
+  updateCanvasPhotoStackBar();
+  updateAllStackButtons();
+}
+
+window.clearCanvasPhotoSelection = clearCanvasPhotoSelection;
+
+window.isCanvasPhotoSelected = function(src) {
+  return selectedCanvasPhotos.has(src);
+};
+
+window.toggleCanvasPhotoSelection = function({ img, wrapper, btn, src }) {
+  if (selectedCanvasPhotos.has(src)) {
+    selectedCanvasPhotos.delete(src);
+    if (wrapper) wrapper.classList.remove('rc-photo-selected');
+    if (btn) {
+      btn.classList.remove('is-selected');
+      btn.innerHTML = '🎴 Stack';
+    }
+  } else {
+    const blockOuter = img.closest('[data-id]') || img.closest('.bn-block');
+    const blockId = blockOuter ? blockOuter.getAttribute('data-id') : null;
+    const caption = img.getAttribute('alt') || img.getAttribute('title') || '';
+    const name = src.split('/').pop() || 'Photo';
+    selectedCanvasPhotos.set(src, {
+      url: src,
+      caption,
+      name,
+      blockId,
+      wrapper,
+      btn
+    });
+    if (wrapper) wrapper.classList.add('rc-photo-selected');
+    if (btn) {
+      btn.classList.add('is-selected');
+      btn.innerHTML = '✓ Stack';
+    }
+  }
+  updateCanvasPhotoStackBar();
+  updateAllStackButtons();
+};
+
+// Wire up floating canvas photo stack bar buttons immediately
+function initCanvasPhotoStackBar() {
+  const btnClear = document.getElementById('btn-canvas-clear-stack-sel');
+  const btnCreate = document.getElementById('btn-canvas-create-stack');
+  btnClear?.addEventListener('click', clearCanvasPhotoSelection);
+  btnCreate?.addEventListener('click', () => {
+    if (typeof window.openPhotoStackModal === 'function') {
+      window.openPhotoStackModal(Array.from(selectedCanvasPhotos.values()));
+    }
+  });
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initCanvasPhotoStackBar);
+} else {
+  initCanvasPhotoStackBar();
+}
+
 // Inject resize + alignment controls as overlays on images in the BlockNote container.
 // Uses MutationObserver so it works even after BlockNote renders asynchronously.
 let _imgResizeObserver = null;
@@ -250,36 +394,108 @@ function setupImageResizeUI(containerId) {
   const container = document.getElementById(containerId);
   if (!container) return;
 
-  function applyMetaToImg(img, meta) {
-    img.style.width = meta.width || '100%';
-    img.style.maxWidth = '100%';
-    img.style.height = 'auto';
-    img.style.display = 'block';
-    if (img._rcWrapper) {
-      img._rcWrapper.style.textAlign = meta.align || 'center';
+  if (!document.getElementById('rc-slider-styles')) {
+    const st = document.createElement('style');
+    st.id = 'rc-slider-styles';
+    st.textContent = `
+      .rc-img-controls {
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      .rc-width-slider {
+        -webkit-appearance: none;
+        appearance: none;
+        height: 6px;
+        background: rgba(255, 255, 255, 0.28);
+        border-radius: 3px;
+        outline: none;
+        touch-action: none;
+        vertical-align: middle;
+        transition: background 0.15s ease;
+      }
+      .rc-width-slider:hover {
+        background: rgba(255, 255, 255, 0.45);
+      }
+      .rc-width-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #ffffff;
+        cursor: grab;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+        border: 1px solid rgba(0,0,0,0.15);
+        transition: transform 0.08s ease, background 0.08s ease;
+      }
+      .rc-width-slider:active::-webkit-slider-thumb {
+        cursor: grabbing;
+        transform: scale(1.25);
+        background: #38bdf8;
+      }
+      .rc-width-slider::-moz-range-thumb {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #ffffff;
+        cursor: grab;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+        border: none;
+      }
+      .rc-width-slider:active::-moz-range-thumb {
+        cursor: grabbing;
+        transform: scale(1.25);
+        background: #38bdf8;
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  function applyMetaToMedia(el, meta) {
+    const w = meta.width || '100%';
+    const a = meta.align || 'center';
+    el.style.width = w;
+    el.style.maxWidth = '100%';
+    el.style.height = 'auto';
+    el.style.display = 'inline-block';
+    el.style.verticalAlign = 'middle';
+    if (el._rcWrapper) {
+      el._rcWrapper.style.textAlign = a;
+    }
+    if (el._rcVideo) {
+      el._rcVideo.style.width = w;
+      el._rcVideo.style.maxWidth = '100%';
+      el._rcVideo.style.display = 'inline-block';
+      el._rcVideo.style.verticalAlign = 'middle';
+    }
+    if (el._rcImg) {
+      el._rcImg.style.width = w;
     }
   }
 
-  function processImage(img) {
-    if (img.dataset.rcManaged) return;
-    // Only manage images that are uploads (not BlockNote UI icons)
-    const src = img.getAttribute('src') || '';
+  function processMedia(el) {
+    if (el.dataset.rcManaged) return;
+    if (el.closest('.photo-stack-container') || el.closest('.editor-photo-stack-preview')) return;
+    // Only manage uploads/images/videos (not BlockNote UI icons)
+    const src = el.getAttribute('src') || el.currentSrc || el.getAttribute('data-url') || '';
     if (!src.startsWith('/uploads/') && !src.startsWith('/images/')) return;
-    img.dataset.rcManaged = '1';
+    el.dataset.rcManaged = '1';
+
+    const isVideo = el.tagName === 'VIDEO' || /\.(mp4|mov|webm|ogg)(\?.*)?$/i.test(src);
 
     const meta = window.imageMetadata.get(src) || { width: '100%', align: 'center' };
 
-    // Wrap image for positioning
+    // Wrap media for positioning
     const wrapper = document.createElement('div');
     wrapper.className = 'rc-img-wrapper';
     wrapper.style.cssText = 'position:relative;text-align:' + (meta.align || 'center') + ';margin:8px 0;';
-    img._rcWrapper = wrapper;
-    if (img.parentNode) {
-      img.parentNode.insertBefore(wrapper, img);
-      wrapper.appendChild(img);
+    el._rcWrapper = wrapper;
+    if (el.parentNode) {
+      el.parentNode.insertBefore(wrapper, el);
+      wrapper.appendChild(el);
     }
 
-    applyMetaToImg(img, meta);
+    applyMetaToMedia(el, meta);
 
     // Build controls overlay
     const controls = document.createElement('div');
@@ -295,7 +511,12 @@ function setupImageResizeUI(containerId) {
         '" style="background:none;border:none;color:#fff;cursor:pointer;padding:1px 4px;font-size:14px;opacity:' +
         (a === (meta.align || 'center') ? '1' : '0.4') + '">' +
         ({left:'⇐',center:'⇌',right:'⇒'}[a]) + '</button>'
-      ).join('');
+      ).join('') +
+      (!isVideo ? (
+        '<span style="opacity:.4;margin:0 2px">|</span>' +
+        '<button type="button" class="rc-stack-toggle-btn" title="Select for Photo Stack" style="background:none;border:none;color:#fff;cursor:pointer;padding:2px 6px;font-size:11px;border-radius:3px;display:inline-flex;align-items:center;gap:3px;">🎴 Stack</button>' +
+        '<button type="button" class="rc-direct-stack-btn" title="Turn selected photos into stack" style="display:' + (selectedCanvasPhotos.size >= 2 ? 'inline-flex' : 'none') + ';background:#2563eb;border:none;color:#fff;cursor:pointer;padding:2px 8px;font-size:11px;font-weight:700;border-radius:3px;margin-left:4px;">⚡ Make Stack (' + selectedCanvasPhotos.size + ')</button>'
+      ) : '');
 
     controls.style.cssText = [
       'display:flex;gap:6px;align-items:center',
@@ -310,21 +531,102 @@ function setupImageResizeUI(containerId) {
       'pointer-events:none'
     ].join(';');
 
+    let isDraggingSlider = false;
+    let previewDebounceTimer = null;
+    let rAFId = null;
+
     wrapper.appendChild(controls);
-    wrapper.addEventListener('mouseenter', () => { controls.style.opacity='1'; controls.style.pointerEvents='auto'; });
-    wrapper.addEventListener('mouseleave', () => { controls.style.opacity='0'; controls.style.pointerEvents='none'; });
+    wrapper.addEventListener('mouseenter', () => {
+      controls.style.opacity = '1';
+      controls.style.pointerEvents = 'auto';
+    });
+    wrapper.addEventListener('mouseleave', () => {
+      if (!isDraggingSlider) {
+        controls.style.opacity = '0';
+        controls.style.pointerEvents = 'none';
+      }
+    });
+
+    // Prevent ProseMirror from capturing slider/control interactions
+    controls.addEventListener('mousedown', (e) => e.stopPropagation());
+    controls.addEventListener('pointerdown', (e) => e.stopPropagation());
+    controls.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
 
     // Width slider
     const slider = controls.querySelector('.rc-width-slider');
     const label  = controls.querySelector('.rc-width-label');
-    slider.addEventListener('input', () => {
-      const w = slider.value + '%';
-      img.style.width = w;
-      label.textContent = slider.value + '%';
+
+    slider.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      isDraggingSlider = true;
+      controls.style.opacity = '1';
+      controls.style.pointerEvents = 'auto';
+    });
+
+    slider.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      isDraggingSlider = true;
+      controls.style.opacity = '1';
+      controls.style.pointerEvents = 'auto';
+    });
+
+    const onSliderRelease = () => {
+      if (isDraggingSlider) {
+        isDraggingSlider = false;
+        if (!wrapper.matches(':hover')) {
+          controls.style.opacity = '0';
+          controls.style.pointerEvents = 'none';
+        }
+        if (previewDebounceTimer) {
+          clearTimeout(previewDebounceTimer);
+          previewDebounceTimer = null;
+        }
+        window.markDirty();
+        if (typeof updatePreview === 'function') updatePreview();
+      }
+    };
+    window.addEventListener('pointerup', onSliderRelease);
+    window.addEventListener('mouseup', onSliderRelease);
+    window.addEventListener('touchend', onSliderRelease);
+
+    slider.addEventListener('input', (e) => {
+      e.stopPropagation();
+      const val = slider.value;
+      const w = val + '%';
+      label.textContent = w;
+
+      if (rAFId) cancelAnimationFrame(rAFId);
+      rAFId = requestAnimationFrame(() => {
+        el.style.width = w;
+        if (el._rcVideo) el._rcVideo.style.width = w;
+        if (el._rcImg) el._rcImg.style.width = w;
+        const v = wrapper.querySelector('video');
+        if (v) v.style.width = w;
+        const im = wrapper.querySelector('img:not([style*="display: none"])');
+        if (im) im.style.width = w;
+      });
+
       const m2 = window.imageMetadata.get(src) || { align: 'center' };
       m2.width = w;
       window.imageMetadata.set(src, m2);
+
+      // Debounce heavy preview updates so dragging is silky smooth 60fps
+      if (previewDebounceTimer) clearTimeout(previewDebounceTimer);
+      previewDebounceTimer = setTimeout(() => {
+        previewDebounceTimer = null;
+        window.markDirty();
+        if (typeof updatePreview === 'function') updatePreview();
+      }, 120);
+    });
+
+    slider.addEventListener('change', (e) => {
+      e.stopPropagation();
+      if (previewDebounceTimer) {
+        clearTimeout(previewDebounceTimer);
+        previewDebounceTimer = null;
+      }
       window.markDirty();
+      if (typeof updatePreview === 'function') updatePreview();
     });
 
     // Alignment buttons
@@ -338,24 +640,132 @@ function setupImageResizeUI(containerId) {
         m2.align = a;
         window.imageMetadata.set(src, m2);
         window.markDirty();
+        if (typeof updatePreview === 'function') updatePreview();
       });
     });
+
+    // Stack toggle button
+    const stackBtn = controls.querySelector('.rc-stack-toggle-btn');
+    if (stackBtn) {
+      if (typeof window.isCanvasPhotoSelected === 'function' && window.isCanvasPhotoSelected(src)) {
+        stackBtn.classList.add('is-selected');
+        stackBtn.innerHTML = '✓ Stack';
+        wrapper.classList.add('rc-photo-selected');
+        const currentItem = selectedCanvasPhotos.get(src);
+        if (currentItem) {
+          currentItem.wrapper = wrapper;
+          currentItem.btn = stackBtn;
+        }
+      }
+      stackBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (typeof window.toggleCanvasPhotoSelection === 'function') {
+          window.toggleCanvasPhotoSelection({ img: el, wrapper, btn: stackBtn, src });
+        }
+      });
+    }
+
+    const directStackBtn = controls.querySelector('.rc-direct-stack-btn');
+    if (directStackBtn) {
+      directStackBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (typeof window.openPhotoStackModal === 'function') {
+          window.openPhotoStackModal(Array.from(selectedCanvasPhotos.values()));
+        }
+      });
+    }
   }
 
-  // Process already-rendered images
-  container.querySelectorAll('img').forEach(processImage);
+  // Process already-rendered images & videos
+  container.querySelectorAll('img, video').forEach(processMedia);
+  enhanceEditorVideos(containerId);
 
-  // Watch for images added by BlockNote async rendering
+  // Watch for images and blocks added by BlockNote async rendering
   _imgResizeObserver = new MutationObserver(mutations => {
+    let hasNewMedia = false;
     for (const m of mutations) {
       for (const node of m.addedNodes) {
         if (node.nodeType !== 1) continue;
-        if (node.tagName === 'IMG') processImage(node);
-        if (node.querySelectorAll) node.querySelectorAll('img').forEach(processImage);
+        if ((node.tagName === 'IMG' || node.tagName === 'VIDEO') && !node.dataset.rcManaged) {
+          processMedia(node);
+          hasNewMedia = true;
+        } else if (node.querySelectorAll) {
+          node.querySelectorAll('img:not([data-rc-managed]), video:not([data-rc-managed])').forEach(media => {
+            processMedia(media);
+            hasNewMedia = true;
+          });
+        }
       }
+    }
+    if (hasNewMedia) {
+      enhanceEditorVideos(containerId);
     }
   });
   _imgResizeObserver.observe(container, { childList: true, subtree: true });
+}
+
+function enhanceEditorVideos(containerId = 'blocknote-container') {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  container.querySelectorAll('img').forEach(img => {
+    const src = img.getAttribute('src') || '';
+    if (!/\.(mp4|mov|webm|ogg)(\?.*)?$/i.test(src)) return;
+
+    const meta = window.imageMetadata.get(src) || { width: '100%', align: 'center' };
+    const width = meta.width || img.style.width || '100%';
+
+    if (img._rcVideoReplaced) {
+      if (img._rcVideo) {
+        img._rcVideo.style.width = width;
+      }
+      return;
+    }
+    img._rcVideoReplaced = true;
+
+    const video = document.createElement('video');
+    video.src = src;
+    video.controls = true;
+    video.preload = 'metadata';
+    video.playsInline = true;
+    video.style.cssText = `max-width: 100%; width: ${width}; border-radius: 4px; display: inline-block; vertical-align: middle; margin: 8px 0; background: #000; box-shadow: 0 4px 16px rgba(0,0,0,0.15);`;
+
+    img._rcVideo = video;
+    video._rcImg = img;
+    img.style.display = 'none';
+
+    if (img.parentNode) {
+      img.parentNode.insertBefore(video, img);
+    }
+
+    if (img._rcWrapper) {
+      img._rcWrapper.style.textAlign = meta.align || 'center';
+    }
+  });
+
+  // Ensure any direct <video> tags have controls, playsinline, and meta width applied
+  container.querySelectorAll('video').forEach(video => {
+    if (!video.hasAttribute('controls')) video.setAttribute('controls', '');
+    if (!video.hasAttribute('preload')) video.setAttribute('preload', 'metadata');
+    if (!video.hasAttribute('playsinline')) video.setAttribute('playsinline', '');
+    video.style.maxWidth = '100%';
+    video.style.borderRadius = '4px';
+
+    const src = video.getAttribute('src') || video.currentSrc || '';
+    if (src && !video.dataset.rcManaged) {
+      const meta = window.imageMetadata.get(src);
+      if (meta && meta.width) {
+        video.style.width = meta.width;
+      }
+    }
+  });
+
+  container.querySelectorAll('.bn-file-loading-preview').forEach(el => {
+    const blockOuter = el.closest('.bn-block-outer');
+    if (blockOuter && (blockOuter.querySelector('video') || blockOuter.querySelector('img[src*="/uploads/"]'))) {
+      el.remove();
+    }
+  });
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -394,9 +804,15 @@ async function collectCurrentEntryState() {
     } catch(e) {}
   }
 
+  const typeSelect = document.getElementById('type-select');
+  const selectedType = typeSelect?.value || (typeof activeType !== 'undefined' ? activeType : 'memory');
+  const worldSelect = document.getElementById('world-select');
+  const selectedWorld = worldSelect?.value || typeWorld[selectedType] || 'life';
+
   return {
     existingId: form.elements.existingId ? form.elements.existingId.value : '',
-    type: typeof activeType !== 'undefined' ? activeType : 'memory',
+    type: selectedType,
+    world: selectedWorld,
     title: form.elements.title ? form.elements.title.value.trim() : '',
     date: form.elements.date ? form.elements.date.value : '',
     location: form.elements.location ? form.elements.location.value.trim() : '',
@@ -418,11 +834,17 @@ async function saveCurrentEntry() {
   if (message) message.textContent = 'Saving…';
 
   try {
-    if (window.USE_BLOCKNOTE_POC && (!window.BlockNotePOCModule || !window.BlockNotePOCModule.isBlockNoteReady())) {
+    if (window.USE_BLOCKNOTE_POC && location.hash.includes('/editor') && (!window.BlockNotePOCModule || !window.BlockNotePOCModule.isBlockNoteReady())) {
       throw new Error('Editor is still loading. Please wait a moment and save again.');
     }
     const payload = await collectCurrentEntryState();
-    if (!payload.title) throw new Error('Add a title before saving.');
+    if (!payload.title) {
+      if (location.hash.includes('/editor')) {
+        const titleEl = document.querySelector('.artifact-title-group h1, h1.person-title');
+        if (titleEl) titleEl.focus();
+      }
+      throw new Error('Add a title before saving.');
+    }
     
     if (typeof typingTimer !== 'undefined') clearTimeout(typingTimer);
     if (typeof captureSnapshot === 'function') captureSnapshot('Saved state (auto-flush)');
@@ -494,14 +916,22 @@ async function saveCurrentEntry() {
   }
 }
 
-$('#cancel').onclick=()=>{show('entries');document.querySelectorAll('.types button').forEach(x=>x.classList.remove('selected'));};
+$('#cancel').onclick=()=>{location.hash='/entries';document.querySelectorAll('.types button').forEach(x=>x.classList.remove('selected'));};
+document.getElementById('btn-new-entry')?.addEventListener('click', () => {
+  if (window.isDirty && !confirm("You have unsaved changes.\n\n[ Stay editing ] or [ Leave without saving ]? Press OK to leave.")) {
+    return;
+  }
+  if (typeof window.setDirty === 'function') window.setDirty(false);
+  initializeNewEntry('memory');
+  location.hash = '/setup/new';
+});
 $('#delete').onclick=async()=>{const id=$('#entry-form').elements.existingId.value;if(!id)return;if(!confirm('Move this entry to the local .trash folder? You can restore it manually if needed.'))return;try{await request(`/api/entry/${encodeURIComponent(id)}`,{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({confirm:true})});$('#entry-form').hidden=true;await loadEntries();show('entries');}catch(error){$('#message').textContent=error.message}};
 function renderEntryList(){const box=$('#entry-list');box.innerHTML=entries.sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(e=>`<button data-id="${esc(e.id)}"><span>${esc(e.type)}</span><strong>${esc(e.title)}</strong><small>${esc(e.location||e.date||'undated')}</small><b>↗</b></button>`).join('')||'<p>Nothing saved yet. Capture the first thing.</p>';box.querySelectorAll('button').forEach(button=>button.onclick=()=>editEntry(button.dataset.id));}
 async function editEntry(id, mode = 'setup'){const entry=await request(`/api/entry/${encodeURIComponent(id)}`);activeType=entry.data.type;
   const form=$('#entry-form');form.hidden=false;form.elements.existingId.value=id;form.elements.title.value=entry.data.title||'';form.elements.date.value=(entry.data.date||'').slice(0,10);form.elements.location.value=entry.data.location||'';form.elements.story.value=entry.story||'';if(form.elements.description)form.elements.description.value=entry.data.description||'';form.elements.people.value=(entry.data.people||[]).join(', ');form.elements.cover.value=entry.data.cover||'';if(form.elements.presentation) {
   form.elements.presentation.value=JSON.stringify(entry.data.presentation||{});
   layoutSelect.value = (entry.data.presentation && entry.data.presentation.layout && entry.data.presentation.layout.mode) ? entry.data.presentation.layout.mode : 'default';
-}form.elements.newTag.value='';$('#image-status').textContent=entry.data.cover?`Attached: ${entry.data.cover}`:'Optional. It will be saved locally with the project.';setupForm(activeType,{...entry.data,id});$('#delete').hidden=false;document.querySelectorAll('.types button').forEach(x=>x.classList.toggle('selected',x.dataset.type===activeType)); window.USE_BLOCKNOTE_POC = true; document.getElementById('type-select').value = activeType; document.getElementById('world-display').value = typeWorld[activeType] || 'Life';
+}form.elements.newTag.value='';$('#image-status').textContent=entry.data.cover?`Attached: ${entry.data.cover}`:'Optional. It will be saved locally with the project.';setupForm(activeType,{...entry.data,id});$('#delete').hidden=false;document.querySelectorAll('.types button').forEach(x=>x.classList.toggle('selected',x.dataset.type===activeType)); window.USE_BLOCKNOTE_POC = true; if (document.getElementById('type-select')) document.getElementById('type-select').value = activeType; if (document.getElementById('world-select')) document.getElementById('world-select').value = entry.data.world || typeWorld[activeType] || 'life';
   // Load per-image metadata from the saved markdown so resize UI initializes correctly
   loadImageMetadataFromMarkdown(entry.story || '');
   if (window.BlockNotePOCModule && typeof window.BlockNotePOCModule.unmountBlockNotePOC === 'function') {
@@ -551,9 +981,14 @@ function updatePreview() {
   }
 
   if (previewPane.hidden) return;
+  const typeSelect = document.getElementById('type-select');
+  const activeTypeVal = typeSelect?.value || activeType || 'memory';
+  const worldSelect = document.getElementById('world-select');
+  const worldSlug = worldSelect?.value || typeWorld[activeTypeVal] || 'life';
   const data = {
     title: entryForm.elements.title.value || 'Untitled',
-    type: activeType,
+    type: activeTypeVal,
+    world: worldSlug,
     date: entryForm.elements.date.value || '',
     location: entryForm.elements.location.value || '',
     story: entryForm.elements.story.value || '',
@@ -564,7 +999,6 @@ function updatePreview() {
   const isPerson = data.type === 'person';
   const niceDateStr = data.date ? new Date(data.date).toLocaleDateString('en', {month:'short', year:'numeric'}) : 'Undated';
   const placeSlugStr = (data.location||'').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-  const worldSlug = data.type === 'travel' || data.type === 'photo' ? 'travel' : (data.type === 'person' || data.type === 'memory' ? 'life' : 'archive');
   
 
   const niceDateFn = (d) => d ? new Date(d).toLocaleDateString('en', {month:'short', year:'numeric'}) : 'Undated';
@@ -591,10 +1025,14 @@ function updatePreview() {
       if (e.related && e.related.includes(currentId)) addTrace(e);
     }
     personTraces.sort((a, b) => {
-      if (a.date && b.date) return new Date(b.date) - new Date(a.date);
-      if (a.date) return -1;
-      if (b.date) return 1;
-      return a.title.localeCompare(b.title);
+      const aDate = a?.data?.date || a?.date;
+      const bDate = b?.data?.date || b?.date;
+      if (aDate && bDate) return new Date(bDate) - new Date(aDate);
+      if (aDate) return -1;
+      if (bDate) return 1;
+      const aTitle = a?.data?.title || a?.title || '';
+      const bTitle = b?.data?.title || b?.title || '';
+      return aTitle.localeCompare(bTitle);
     });
   }
 
@@ -633,7 +1071,24 @@ function updatePreview() {
 
   const headerHtml = renderEntryHeader(data, isPerson, niceDateStr, placeSlugStr, worldSlug);
   const coverHtml = renderEntryCover(data, isPerson, niceDateStr);
-  const bodyHtml = typeof marked !== "undefined" ? marked.parse(data.story) : simpleMarkdown(data.story);
+  let bodyHtml = typeof marked !== "undefined" ? marked.parse(data.story) : simpleMarkdown(data.story);
+  bodyHtml = bodyHtml.replace(/<img([^>]*src="([^"]+\.(?:mp4|mov|webm|ogg)[^"]*)"[^>]*)>/gi, (match, attrs, src) => {
+    const cleanSrc = src.split('#')[0];
+    const titleMatch = attrs.match(/title="([^"]*)"/);
+    const title = titleMatch ? titleMatch[1] : '';
+    const meta = (typeof window.imageMetadata !== 'undefined' && (window.imageMetadata.get(cleanSrc) || window.imageMetadata.get(src))) || {};
+    const wMatch = title.match(/w=([^,\s]+)/);
+    const aMatch = title.match(/a=([^,\s]+)/);
+    const width = meta.width || (wMatch ? wMatch[1] : '100%');
+    const align = meta.align || (aMatch ? aMatch[1] : 'center');
+
+    const wrapperStyle = `text-align:${align};margin:1.5em 0;`;
+    const videoStyle = `max-width:100%;width:${width};height:auto;display:inline-block;vertical-align:middle;border-radius:4px;background:#000;box-shadow:0 4px 16px rgba(0,0,0,0.15);`;
+    return `<div class="rc-video-wrapper" style="${wrapperStyle}"><video controls preload="metadata" playsinline src="${cleanSrc}" style="${videoStyle}"></video></div>`;
+  });
+  if (typeof transformPhotoStacks === "function") {
+    bodyHtml = transformPhotoStacks(bodyHtml);
+  }
   const tagsHtml = renderEntryTags(tagVals);
   const tracesHtml = renderPersonTraces(personTraces, niceDateFn);
   const contHtml = renderContinuation(curatedThreads);
@@ -653,37 +1108,50 @@ function updatePreview() {
     </div>
   `;
   
-  // Promote markdown image titles to figcaptions in the preview
+  // Promote markdown image titles to figcaptions in the preview (except images in photo stacks)
   previewContent.querySelectorAll('.prose img').forEach((el) => {
     const img = el; // let JS duck-typing handle it in browser, but we'll use getAttribute for TS
-    if (!img.closest('figure')) {
-      const src = img.getAttribute('src');
-      const title = img.getAttribute('title');
-      if (!title && !(src && src.includes('#'))) return;
-      
-      const fig = document.createElement('figure');
-      fig.className = 'story-image-figure';
-      
-      if (src && src.includes('#')) {
-        const hash = src.split('#')[1];
-        const params = new URLSearchParams(hash);
-        if (params.get('s')) fig.classList.add('s-' + params.get('s'));
-        if (params.get('a')) fig.classList.add('a-' + params.get('a'));
-        if (params.get('t')) fig.classList.add('t-' + params.get('t'));
-      }
-      
-      if (img.parentNode) {
-        img.parentNode.insertBefore(fig, img);
-        fig.appendChild(img);
-        if (title) {
-          const cap = document.createElement('figcaption');
-          cap.textContent = title;
-          fig.appendChild(cap);
-        }
+    if (img.closest('figure') || img.closest('.photo-stack-container')) return;
+    
+    const src = img.getAttribute('src');
+    const title = img.getAttribute('title');
+    if (!title && !(src && src.includes('#'))) return;
+    
+    const fig = document.createElement('figure');
+    fig.className = 'story-image-figure';
+    
+    if (src && src.includes('#')) {
+      const hash = src.split('#')[1];
+      const params = new URLSearchParams(hash);
+      if (params.get('s')) fig.classList.add('s-' + params.get('s'));
+      if (params.get('a')) fig.classList.add('a-' + params.get('a'));
+      if (params.get('t')) fig.classList.add('t-' + params.get('t'));
+    }
+    
+    if (img.parentNode) {
+      img.parentNode.insertBefore(fig, img);
+      fig.appendChild(img);
+      if (title) {
+        const cap = document.createElement('figcaption');
+        cap.textContent = title;
+        fig.appendChild(cap);
       }
     }
   });
+
+  // Initialize interactive gestures on photo stacks
+  if (typeof initPhotoStacks === "function") {
+    initPhotoStacks(previewContent);
+  }
   
+  // Update View Page button link in toolbar
+  const btnViewPublic = document.getElementById('btn-view-public');
+  if (btnViewPublic) {
+    const curId = entryForm?.elements?.existingId?.value || '';
+    btnViewPublic.href = curId ? `/entry/${curId}/` : '#';
+    btnViewPublic.style.display = curId ? 'inline-flex' : 'none';
+  }
+
   // PHASE 8H.5: INIT CANVAS EDITOR
   initCanvasEditor();
 }
@@ -708,6 +1176,10 @@ entryForm.addEventListener('input', (e) => {
   if (e.target && e.target.id !== 'image' && typeof handleTyping === 'function') {
     handleTyping();
   }
+});
+entryForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  window.goToEditor();
 });
 
 
@@ -939,6 +1411,494 @@ function renderOptions(key, label, options) {
 function openInlineEditor(field, title, rect) {
   // Disabled. All editing is now direct on the canvas.
 }
+
+// ==========================================
+// PHOTO STACK BUILDER MODAL
+// ==========================================
+let photoStackPhotos = []; // array of { url, caption, name, blockId }
+
+function getAllStoryImages() {
+  const list = [];
+  const seenUrls = new Set();
+
+  // 1. From BlockNote document if available
+  if (window.USE_BLOCKNOTE_POC && window.BlockNotePOCModule && typeof window.BlockNotePOCModule.getStoryImages === 'function') {
+    try {
+      const bnImgs = window.BlockNotePOCModule.getStoryImages();
+      for (const item of bnImgs) {
+        if (item.url && !seenUrls.has(item.url)) {
+          seenUrls.add(item.url);
+          list.push({
+            blockId: item.blockId,
+            url: item.url,
+            caption: item.caption || item.name || '',
+            name: item.name || item.url.split('/').pop() || 'Photo'
+          });
+        }
+      }
+    } catch (e) {}
+  }
+
+  // 2. From DOM (finds any rendered images in #blocknote-container)
+  const container = document.getElementById('blocknote-container');
+  if (container) {
+    container.querySelectorAll('img').forEach(img => {
+      if (img.closest('.photo-stack-container') || img.closest('.editor-photo-stack-preview')) return;
+      const src = img.getAttribute('src') || '';
+      if (!src.startsWith('/uploads/') && !src.startsWith('/images/')) return;
+
+      const blockOuter = img.closest('[data-id]') || img.closest('.bn-block');
+      const blockId = blockOuter ? blockOuter.getAttribute('data-id') : null;
+
+      const existing = list.find(x => x.url === src);
+      if (existing) {
+        if (!existing.blockId && blockId) existing.blockId = blockId;
+      } else if (!seenUrls.has(src)) {
+        seenUrls.add(src);
+        list.push({
+          blockId: blockId || null,
+          url: src,
+          caption: img.getAttribute('alt') || img.getAttribute('title') || '',
+          name: src.split('/').pop() || 'Photo'
+        });
+      }
+    });
+  }
+
+  // 3. Fallback: parse markdown from textarea if list is still empty
+  if (list.length === 0 && entryForm?.elements?.story?.value) {
+    const md = entryForm.elements.story.value;
+    const re = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g;
+    let match;
+    while ((match = re.exec(md)) !== null) {
+      const alt = match[1] || '';
+      const url = match[2];
+      const title = match[3] || alt;
+      if (!seenUrls.has(url)) {
+        seenUrls.add(url);
+        list.push({
+          blockId: null,
+          url,
+          caption: title,
+          name: url.split('/').pop() || 'Photo'
+        });
+      }
+    }
+  }
+
+  return list;
+}
+
+function initPhotoStackModal() {
+  const btnAddPhotoStack = document.getElementById('btn-add-photo-stack');
+  const modalBackdrop = document.getElementById('photo-stack-modal-backdrop');
+  const btnClose = document.getElementById('btn-close-photo-stack-modal');
+  const btnCancel = document.getElementById('btn-cancel-photo-stack');
+  const btnInsert = document.getElementById('btn-insert-photo-stack');
+  const fileInput = document.getElementById('photo-stack-file-input');
+  const statusEl = document.getElementById('photo-stack-status');
+  const listEl = document.getElementById('photo-stack-items-list');
+  const pagePhotosGrid = document.getElementById('photo-stack-page-photos-grid');
+  const countBadge = document.getElementById('photo-stack-count-badge');
+  const replaceCheckbox = document.getElementById('photo-stack-replace-checkbox');
+  const btnSelectAllStory = document.getElementById('btn-select-all-story-photos');
+  const btnClearStory = document.getElementById('btn-clear-story-photos');
+
+  if (!btnAddPhotoStack || !modalBackdrop) return;
+
+  let storyPhotos = [];
+
+  function openModal(preselected = null) {
+    storyPhotos = getAllStoryImages();
+
+    // Determine initial stack photos
+    if (preselected && Array.isArray(preselected) && preselected.length > 0) {
+      photoStackPhotos = preselected.map(p => ({
+        url: p.url,
+        caption: p.caption || '',
+        name: p.name || '',
+        blockId: p.blockId || null,
+        pos: p.pos || 'center'
+      }));
+    } else if (selectedCanvasPhotos.size > 0) {
+      photoStackPhotos = Array.from(selectedCanvasPhotos.values()).map(p => ({
+        url: p.url,
+        caption: p.caption || '',
+        name: p.name || '',
+        blockId: p.blockId || null,
+        pos: p.pos || 'center'
+      }));
+    } else {
+      photoStackPhotos = [];
+    }
+
+    const defaultFitRadio = document.querySelector('input[name="photo-stack-fit-mode"][value="contain"]');
+    if (defaultFitRadio) defaultFitRadio.checked = true;
+
+    if (replaceCheckbox) replaceCheckbox.checked = true;
+    if (statusEl) statusEl.textContent = '';
+
+    renderStoryPhotosGrid();
+    renderPhotoStackList();
+    modalBackdrop.style.display = 'flex';
+  }
+
+  window.openPhotoStackModal = openModal;
+
+  function closeModal() {
+    modalBackdrop.style.display = 'none';
+    photoStackPhotos = [];
+    if (fileInput) fileInput.value = '';
+    if (statusEl) statusEl.textContent = '';
+  }
+
+  function renderStoryPhotosGrid() {
+    if (!pagePhotosGrid) return;
+    if (storyPhotos.length === 0) {
+      pagePhotosGrid.innerHTML = `
+        <div style="font-size:11px; color:var(--text-light); font-family:var(--mono); padding:12px; text-align:center; width:100%;">
+          No existing photos found on this page. Upload new ones below!
+        </div>
+      `;
+      return;
+    }
+
+    pagePhotosGrid.innerHTML = storyPhotos.map((photo, i) => {
+      const isSelected = photoStackPhotos.some(p => p.url === photo.url);
+      const cap = escapeAttr(photo.caption || photo.name || `Photo ${i+1}`);
+      return `
+        <div class="photo-stack-thumb-card ${isSelected ? 'is-selected' : ''}" data-url="${escapeAttr(photo.url)}" data-index="${i}" title="${cap}">
+          <img src="${photo.url}" alt="${cap}" style="width:100%; height:100%; object-fit:cover; pointer-events:none;">
+          <div class="thumb-check-badge">${isSelected ? '✓' : '+'}</div>
+        </div>
+      `;
+    }).join('');
+
+    // Attach click listeners on thumb cards
+    pagePhotosGrid.querySelectorAll('.photo-stack-thumb-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const url = card.dataset.url;
+        const storyPhoto = storyPhotos.find(p => p.url === url);
+        if (!storyPhoto) return;
+
+        const existingIdx = photoStackPhotos.findIndex(p => p.url === url);
+        if (existingIdx !== -1) {
+          // Deselect
+          photoStackPhotos.splice(existingIdx, 1);
+        } else {
+          // Select
+          photoStackPhotos.push({
+            url: storyPhoto.url,
+            caption: storyPhoto.caption || '',
+            name: storyPhoto.name || '',
+            blockId: storyPhoto.blockId || null
+          });
+        }
+        syncStoryPhotosGridSelection();
+        renderPhotoStackList();
+      });
+    });
+  }
+
+  function syncStoryPhotosGridSelection() {
+    if (!pagePhotosGrid) return;
+    const selectedUrls = new Set(photoStackPhotos.map(p => p.url));
+    pagePhotosGrid.querySelectorAll('.photo-stack-thumb-card').forEach(card => {
+      const isSel = selectedUrls.has(card.dataset.url);
+      if (isSel) {
+        card.classList.add('is-selected');
+        const badge = card.querySelector('.thumb-check-badge');
+        if (badge) badge.textContent = '✓';
+      } else {
+        card.classList.remove('is-selected');
+        const badge = card.querySelector('.thumb-check-badge');
+        if (badge) badge.textContent = '+';
+      }
+    });
+  }
+
+  btnSelectAllStory?.addEventListener('click', () => {
+    for (const sp of storyPhotos) {
+      if (!photoStackPhotos.some(p => p.url === sp.url)) {
+        photoStackPhotos.push({
+          url: sp.url,
+          caption: sp.caption || '',
+          name: sp.name || '',
+          blockId: sp.blockId || null
+        });
+      }
+    }
+    syncStoryPhotosGridSelection();
+    renderPhotoStackList();
+  });
+
+  btnClearStory?.addEventListener('click', () => {
+    const storyUrls = new Set(storyPhotos.map(sp => sp.url));
+    photoStackPhotos = photoStackPhotos.filter(p => !storyUrls.has(p.url));
+    syncStoryPhotosGridSelection();
+    renderPhotoStackList();
+  });
+
+  btnAddPhotoStack.addEventListener('click', () => openModal());
+  btnClose?.addEventListener('click', closeModal);
+  btnCancel?.addEventListener('click', closeModal);
+
+  modalBackdrop.addEventListener('click', (e) => {
+    if (e.target === modalBackdrop) closeModal();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modalBackdrop.style.display === 'flex') {
+      closeModal();
+    }
+  });
+
+  function renderPhotoStackList() {
+    if (countBadge) {
+      countBadge.textContent = `${photoStackPhotos.length} card${photoStackPhotos.length !== 1 ? 's' : ''}`;
+    }
+
+    if (!listEl) return;
+    if (photoStackPhotos.length === 0) {
+      listEl.innerHTML = `
+        <div id="photo-stack-empty-msg" style="text-align:center; padding:32px 16px; color:var(--text-light); font-size:12px; font-family:var(--mono);">
+          No photos selected yet.<br>Click photos above or "+ Upload More Photos" to add to this stack.
+        </div>
+      `;
+      if (btnInsert) btnInsert.disabled = true;
+      return;
+    }
+
+    if (btnInsert) btnInsert.disabled = false;
+    listEl.innerHTML = photoStackPhotos.map((photo, i) => `
+      <div class="photo-stack-builder-row" data-index="${i}" style="display:flex; align-items:center; gap:8px; background:var(--paper); border:1px solid var(--line); border-radius:4px; padding:6px 10px;">
+        <div style="width:40px; height:40px; border-radius:3px; overflow:hidden; background:#222; flex-shrink:0; display:flex; align-items:center; justify-content:center;">
+          <img src="${photo.url}" alt="${escapeAttr(photo.caption || '')}" style="width:100%; height:100%; object-fit:cover;">
+        </div>
+        <div style="flex:1; min-width:0; display:flex; gap:6px;">
+          <input type="text" class="photo-stack-row-caption" data-index="${i}" placeholder="Card caption (e.g. At the beach)" value="${escapeAttr(photo.caption || '')}" style="flex:1; min-width:0; padding:6px 8px; font-family:var(--mono); font-size:12px; border:1px solid var(--line); border-radius:3px; background:var(--bg); color:var(--text); box-sizing:border-box;">
+          <select class="photo-stack-row-pos" data-index="${i}" title="Focal point if frame is filled" style="width:78px; padding:6px 4px; font-family:var(--mono); font-size:11px; border:1px solid var(--line); border-radius:3px; background:var(--bg); color:var(--text); cursor:pointer;">
+            <option value="center" ${(photo.pos || 'center') === 'center' ? 'selected' : ''}>Center</option>
+            <option value="top" ${photo.pos === 'top' ? 'selected' : ''}>Top</option>
+            <option value="bottom" ${photo.pos === 'bottom' ? 'selected' : ''}>Bottom</option>
+          </select>
+        </div>
+        <div style="display:flex; gap:4px; align-items:center; flex-shrink:0;">
+          <button type="button" class="btn-photo-up secondary" data-index="${i}" title="Move up" style="padding:4px 8px; font-size:11px; cursor:pointer;" ${i === 0 ? 'disabled' : ''}>↑</button>
+          <button type="button" class="btn-photo-down secondary" data-index="${i}" title="Move down" style="padding:4px 8px; font-size:11px; cursor:pointer;" ${i === photoStackPhotos.length - 1 ? 'disabled' : ''}>↓</button>
+          <button type="button" class="btn-photo-del secondary" data-index="${i}" title="Remove photo" style="padding:4px 8px; font-size:11px; color:#d9534f; cursor:pointer;">✕</button>
+        </div>
+      </div>
+    `).join('');
+
+    // Attach caption change listeners
+    listEl.querySelectorAll('.photo-stack-row-caption').forEach(input => {
+      input.addEventListener('input', (e) => {
+        const idx = Number(e.target.dataset.index);
+        if (photoStackPhotos[idx]) {
+          photoStackPhotos[idx].caption = e.target.value;
+        }
+      });
+    });
+
+    // Attach focal point listeners
+    listEl.querySelectorAll('.photo-stack-row-pos').forEach(sel => {
+      sel.addEventListener('change', (e) => {
+        const idx = Number(e.target.dataset.index);
+        if (photoStackPhotos[idx]) {
+          photoStackPhotos[idx].pos = e.target.value;
+        }
+      });
+    });
+
+    // Move up
+    listEl.querySelectorAll('.btn-photo-up').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.index);
+        if (idx > 0) {
+          const temp = photoStackPhotos[idx];
+          photoStackPhotos[idx] = photoStackPhotos[idx - 1];
+          photoStackPhotos[idx - 1] = temp;
+          renderPhotoStackList();
+        }
+      });
+    });
+
+    // Move down
+    listEl.querySelectorAll('.btn-photo-down').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.index);
+        if (idx < photoStackPhotos.length - 1) {
+          const temp = photoStackPhotos[idx];
+          photoStackPhotos[idx] = photoStackPhotos[idx + 1];
+          photoStackPhotos[idx + 1] = temp;
+          renderPhotoStackList();
+        }
+      });
+    });
+
+    // Delete
+    listEl.querySelectorAll('.btn-photo-del').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.index);
+        photoStackPhotos.splice(idx, 1);
+        syncStoryPhotosGridSelection();
+        renderPhotoStackList();
+      });
+    });
+  }
+
+  // Handle file uploads
+  fileInput?.addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    if (statusEl) statusEl.textContent = `Uploading ${files.length} photo(s)...`;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      try {
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ name: file.name, type: file.type, dataUrl })
+        });
+        const data = await res.json();
+        if (data.url) {
+          const nameClean = file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ');
+          photoStackPhotos.push({
+            url: data.url,
+            caption: nameClean,
+            name: file.name,
+            blockId: null
+          });
+        }
+      } catch (err) {
+        console.error('Error uploading photo for stack', err);
+      }
+    }
+
+    if (statusEl) statusEl.textContent = `Added ${files.length} photo(s).`;
+    fileInput.value = '';
+    renderPhotoStackList();
+  });
+
+  // Handle Insert Stack
+  btnInsert?.addEventListener('click', async () => {
+    if (photoStackPhotos.length === 0) return;
+
+    const fitRadio = document.querySelector('input[name="photo-stack-fit-mode"]:checked');
+    const stackFit = fitRadio ? fitRadio.value : 'contain';
+
+    // Generate markdown block
+    const stackLines = [
+      `:::stack fit=${stackFit}`,
+      ''
+    ];
+    for (const p of photoStackPhotos) {
+      const cap = (p.caption || '').trim();
+      const posToken = (p.pos && p.pos !== 'center') ? ` pos=${p.pos}` : '';
+      const titleAttr = (cap || posToken) ? ` "${cap}${posToken}"` : '';
+      stackLines.push(`![${cap}](${p.url}${titleAttr})`);
+      stackLines.push('');
+    }
+    stackLines.push(':::');
+    const stackMd = stackLines.join('\n');
+
+    const doReplace = replaceCheckbox ? replaceCheckbox.checked : true;
+    let inserted = false;
+
+    // Ensure we have blockIds for all story photos in BlockNote mode
+    if (window.USE_BLOCKNOTE_POC && window.BlockNotePOCModule) {
+      try {
+        const currentStoryImgs = typeof window.BlockNotePOCModule.getStoryImages === 'function' ? window.BlockNotePOCModule.getStoryImages() : [];
+        for (const p of photoStackPhotos) {
+          if (!p.blockId) {
+            const match = currentStoryImgs.find(img => img.url === p.url);
+            if (match) p.blockId = match.blockId;
+          }
+        }
+      } catch (e) {}
+    }
+
+    const blockIdsToReplace = doReplace ? photoStackPhotos.map(p => p.blockId).filter(Boolean) : [];
+
+    if (window.USE_BLOCKNOTE_POC && window.BlockNotePOCModule) {
+      if (doReplace && blockIdsToReplace.length > 0 && typeof window.BlockNotePOCModule.replaceImagesWithStack === 'function') {
+        inserted = await window.BlockNotePOCModule.replaceImagesWithStack(blockIdsToReplace, stackMd);
+      } else if (typeof window.BlockNotePOCModule.insertMarkdownAtCursor === 'function') {
+        inserted = await window.BlockNotePOCModule.insertMarkdownAtCursor(stackMd);
+      }
+
+      if (inserted) {
+        try {
+          const md = await window.BlockNotePOCModule.getBlockNoteMarkdown();
+          if (entryForm.elements.story) entryForm.elements.story.value = md;
+        } catch (e) {}
+      }
+    }
+
+    if (!inserted) {
+      // Fallback: textarea mode
+      const storyEl = entryForm?.elements?.story;
+      if (storyEl) {
+        let curVal = storyEl.value || '';
+        if (doReplace) {
+          // Find first occurrence of any selected photo to place the stack there
+          let firstMatchIdx = -1;
+          for (const p of photoStackPhotos) {
+            const esc = escapeRegex(p.url);
+            const re = new RegExp(`!\\[[^\\]]*\\]\\(${esc}[^)]*\\)\\n*`, 'g');
+            const match = re.exec(curVal);
+            if (match && (firstMatchIdx === -1 || match.index < firstMatchIdx)) {
+              firstMatchIdx = match.index;
+            }
+          }
+
+          for (const p of photoStackPhotos) {
+            const esc = escapeRegex(p.url);
+            const re = new RegExp(`!\\[[^\\]]*\\]\\(${esc}[^)]*\\)\\n*`, 'g');
+            curVal = curVal.replace(re, '');
+          }
+
+          if (firstMatchIdx !== -1) {
+            curVal = curVal.slice(0, firstMatchIdx) + stackMd + '\n\n' + curVal.slice(firstMatchIdx);
+          } else {
+            curVal = curVal ? `${curVal}\n\n${stackMd}\n` : `${stackMd}\n`;
+          }
+          storyEl.value = curVal.trim();
+        } else {
+          storyEl.value = curVal ? `${curVal}\n\n${stackMd}\n` : `${stackMd}\n`;
+        }
+        storyEl.dispatchEvent(new Event('input', { bubbles: true }));
+        inserted = true;
+      }
+    }
+
+    clearCanvasPhotoSelection();
+    if (typeof window.markDirty === 'function') window.markDirty();
+    updatePreview();
+    closeModal();
+  });
+}
+
+function escapeAttr(str) {
+  return String(str || '').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
+function escapeRegex(str) {
+  return String(str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+initPhotoStackModal();
+
 
 
 
@@ -1211,8 +2171,14 @@ const dirtyIndicator = $('#dirty-indicator');
 
 function getEditorState() {
   const form = $('#entry-form');
+  const typeSelect = document.getElementById('type-select');
+  const worldSelect = document.getElementById('world-select');
+  const currentType = typeSelect?.value || (typeof activeType !== 'undefined' ? activeType : '');
+  const currentWorld = worldSelect?.value || (currentType ? (typeWorld[currentType] || 'life') : '');
+
   return {
-    type: typeof activeType !== 'undefined' ? activeType : '',
+    type: currentType,
+    world: currentWorld,
     title: form.elements.title ? form.elements.title.value : '',
     date: form.elements.date ? form.elements.date.value : '',
     location: form.elements.location ? form.elements.location.value : '',
@@ -1277,7 +2243,15 @@ function restoreSnapshot(index) {
   if (form.elements.featured) form.elements.featured.checked = state.featured || false;
   if (form.elements.status) form.elements.status.value = state.status || '';
   if (form.elements.accent) form.elements.accent.value = state.accent || '';
-  if (state.type && typeof activeType !== 'undefined') activeType = state.type;
+  if (state.type) {
+    if (typeof activeType !== 'undefined') activeType = state.type;
+    const typeSelect = document.getElementById('type-select');
+    if (typeSelect) typeSelect.value = state.type;
+  }
+  if (state.world) {
+    const worldSelect = document.getElementById('world-select');
+    if (worldSelect) worldSelect.value = state.world;
+  }
   
   // Restore tags
   form.querySelectorAll('input[name="tags"]').forEach(cb => {
@@ -1837,5 +2811,308 @@ document.getElementById('preview-content')?.addEventListener('click', (e) => {
       link.target = '_blank';
       link.title = 'Open public page ↗';
     }
+  }
+});
+
+
+
+// ==========================================
+// RHYTHM SYSTEM
+// ==========================================
+let rhythmHabits = [];
+let rhythmRecords = {};
+let currentRhythmDate = new Date();
+
+async function loadRhythm() {
+  const [habitsRes, recordsRes] = await Promise.all([
+    request('/api/rhythm-habits'),
+    request('/api/rhythm-records')
+  ]);
+  rhythmHabits = habitsRes.habits || [];
+  rhythmRecords = recordsRes.records || {};
+  renderRhythmCalendar();
+}
+
+function renderRhythmCalendar() {
+  const container = document.getElementById('rhythm-calendar-container');
+  if (!container) return;
+  
+  if (rhythmHabits.length === 0) {
+    container.innerHTML = '<p style="color:var(--text-light); font-family:var(--mono);">No habits configured. Click "+ Add Habits" to start.</p>';
+    return;
+  }
+  
+  const year = currentRhythmDate.getFullYear();
+  const month = currentRhythmDate.getMonth(); // 0-indexed
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const monthName = currentRhythmDate.toLocaleString('default', { month: 'long', year: 'numeric' }).toUpperCase();
+  
+  let html = `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; font-family:var(--mono); font-size:12px;">
+      <button type="button" class="secondary" onclick="changeRhythmMonth(-1)" style="padding:4px 8px; border:none;">← Prev</button>
+      <strong>${monthName}</strong>
+      <button type="button" class="secondary" onclick="changeRhythmMonth(1)" style="padding:4px 8px; border:none;">Next →</button>
+    </div>
+    <div style="display:grid; grid-template-columns: minmax(100px, 1fr) repeat(${daysInMonth}, 24px); gap:4px; align-items:center; font-family:var(--mono); font-size:11px;">
+  `;
+  
+  // Header row (Days)
+  html += `<div></div>`; // Empty top-left corner
+  for (let d = 1; d <= daysInMonth; d++) {
+    html += `<div style="text-align:center; color:var(--text-light); opacity:0.6;">${d}</div>`;
+  }
+  
+  // Habit rows
+  rhythmHabits.forEach(habit => {
+    html += `<div style="display:flex; justify-content:space-between; align-items:center; padding-right:12px; color:var(--text-light); text-transform:uppercase; letter-spacing:0.05em; white-space:nowrap;">
+      <div style="display:flex; gap:4px; opacity:0.3; margin-right:8px;">
+        <button type="button" onclick="moveHabit('${habit.id}', -1)" style="background:none; border:none; color:inherit; cursor:pointer; padding:0 2px;">↑</button>
+        <button type="button" onclick="moveHabit('${habit.id}', 1)" style="background:none; border:none; color:inherit; cursor:pointer; padding:0 2px;">↓</button>
+        <button type="button" onclick="openRhythmModal('edit', '${habit.id}')" style="background:none; border:none; color:inherit; cursor:pointer; padding:0 2px;">✎</button>
+      </div>
+      <span style="cursor:pointer; ${habit.active===false?'text-decoration:line-through; opacity:0.5':''}" onclick="openRhythmModal('edit', '${habit.id}')" title="Edit ${esc(habit.name)}">${esc(habit.name)}</span>
+    </div>`;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const record = rhythmRecords[dateStr] && rhythmRecords[dateStr][habit.id];
+      const isCompleted = record && (record.done || record.value > 0);
+      
+      const today = new Date();
+      const isToday = (d === today.getDate() && month === today.getMonth() && year === today.getFullYear());
+      
+      let marker = '·';
+      if (isCompleted) {
+         marker = habit.mode === 'NUMBER' || habit.mode === 'DURATION' ? '●' : '●';
+      }
+      
+      let style = `text-align:center; cursor:pointer; user-select:none; width:24px; height:24px; display:flex; align-items:center; justify-content:center;`;
+      if (isToday) style += ' background:rgba(0,0,0,0.05); border-radius:4px;';
+      if (isCompleted) style += ' color:var(--accent, #e59a72);';
+      else style += ' color:var(--line); opacity:0.6;';
+      
+      html += `<div style="${style}" onclick="toggleRhythmRecord('${habit.id}', '${dateStr}', '${habit.mode}')" title="${dateStr}">${marker}</div>`;
+    }
+  });
+  
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+window.changeRhythmMonth = function(delta) {
+  currentRhythmDate.setMonth(currentRhythmDate.getMonth() + delta);
+  renderRhythmCalendar();
+};
+
+window.toggleRhythmRecord = async function(habitId, dateStr, mode) {
+  if (!rhythmRecords[dateStr]) rhythmRecords[dateStr] = {};
+  
+  const current = rhythmRecords[dateStr][habitId] || {};
+  let newValue = null;
+  
+  if (mode === 'CHECKBOX') {
+    newValue = current.done ? null : { done: true };
+  } else {
+    const val = prompt(`Enter value for ${dateStr}:`, current.value || '');
+    if (val === null) return; // Cancelled
+    if (val.trim() === '') newValue = null;
+    else newValue = { value: parseFloat(val) || val };
+  }
+  
+  if (newValue === null) {
+    delete rhythmRecords[dateStr][habitId];
+  } else {
+    rhythmRecords[dateStr][habitId] = newValue;
+  }
+  
+  renderRhythmCalendar();
+  
+  // Persist
+  try {
+    const msg = document.getElementById('rhythm-message');
+    msg.textContent = 'Saving...';
+    await request('/api/rhythm-records', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ records: rhythmRecords }) });
+    msg.textContent = 'Saved.';
+    setTimeout(() => msg.textContent = '', 2000);
+  } catch (err) {
+    console.error(err);
+    document.getElementById('rhythm-message').textContent = 'Save failed.';
+  }
+};
+
+// Add Habits UI
+document.getElementById('btn-add-habits')?.addEventListener('click', async () => {
+  window.openRhythmModal('add');
+  const container = document.getElementById('habits-presets-container');
+  if (!container) return;
+  
+  container.innerHTML = '<p style="font-family:var(--mono); color:var(--ink); opacity:0.6;">Loading presets...</p>';
+  
+  try {
+    const presets = await request('/api/rhythm-presets');
+    let html = '';
+    
+    const currentHabitIds = new Set(window.rhythmHabits?.map(h => h.id) || (typeof rhythmHabits !== 'undefined' ? rhythmHabits.map(h => h.id) : []));
+    
+    if (Array.isArray(presets) && presets.length > 0) {
+      presets.forEach(group => {
+        html += '<div style="margin-bottom: 24px;">';
+        html += '<h4 style="margin:0 0 16px 0; color:var(--ink); opacity:0.5; font-size:11px; font-family:var(--mono); text-transform:uppercase; letter-spacing:0.05em; border-bottom:1px solid var(--line); padding-bottom:8px;">' + group.category + '</h4>';
+        html += '<div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:12px;">';
+        
+        if (Array.isArray(group.habits)) {
+          group.habits.forEach(habit => {
+            const isChecked = currentHabitIds.has(habit.id);
+            const checkedAttr = isChecked ? 'checked' : '';
+            const opacity = isChecked ? '1' : '0.5';
+            
+            html += '<label style="display:flex !important; flex-direction:row !important; align-items:center !important; gap:10px; margin:4px 0 !important; cursor:pointer; font-size:14px; font-family:var(--mono); text-transform:none !important; letter-spacing:normal; color:var(--ink); padding:2px 0; user-select:none;">';
+            html += '<input type="checkbox" class="preset-habit-cb" data-id="' + habit.id + '" data-name="' + habit.name + '" data-mode="' + habit.mode + '" data-category="' + group.category + '" ' + checkedAttr + ' style="width:16px; height:16px; margin:0; cursor:pointer;">';
+            html += '<span style="line-height:1; color:var(--ink); opacity:' + opacity + ';">' + habit.name + '</span>';
+            html += '</label>';
+          });
+        }
+        
+        html += '</div></div>';
+      });
+      container.innerHTML = html;
+    } else {
+      container.innerHTML = '<p style="font-family:var(--mono); color:var(--ink);">No presets found.</p>';
+    }
+  } catch (err) {
+    console.error('Error loading presets:', err);
+    container.innerHTML = '<p style="font-family:var(--mono); color:red;">Failed to load presets.</p>';
+  }
+});
+
+document.getElementById('btn-save-habits')?.addEventListener('click', async () => {
+  const cbs = document.querySelectorAll('.preset-habit-cb');
+  let newHabits = [];
+  cbs.forEach(cb => {
+    if (cb.checked) {
+      newHabits.push({
+        id: cb.dataset.id,
+        name: cb.dataset.name,
+        mode: cb.dataset.mode,
+        category: cb.dataset.category,
+        active: true
+      });
+    }
+  });
+  
+  // Try to preserve existing order and custom habits later, but for now simple overwrite of presets
+  // Actually, let's merge smartly:
+  const existingMap = new Map(rhythmHabits.map(h => [h.id, h]));
+  const finalHabits = [];
+  
+  // keep existing custom habits (ones not in checkboxes) - wait, we only know if they are in checkboxes if we check.
+  rhythmHabits.forEach(h => {
+    const cb = document.querySelector(`.preset-habit-cb[data-id="${h.id}"]`);
+    if (!cb) finalHabits.push(h); // Keep it, it's custom
+  });
+  
+  newHabits.forEach(nh => {
+    if (existingMap.has(nh.id)) finalHabits.push(existingMap.get(nh.id)); // Preserve config
+    else finalHabits.push(nh); // Add new
+  });
+  
+  rhythmHabits = finalHabits;
+  renderRhythmCalendar();
+  closeRhythmModal();
+  
+  try {
+    await request('/api/rhythm-habits', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ habits: rhythmHabits }) });
+  } catch (err) {
+    console.error(err);
+  }
+});
+
+
+
+
+
+
+
+document.getElementById('edit-habit-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = document.getElementById('edit-habit-id').value;
+  const habit = rhythmHabits.find(h => h.id === id);
+  if (habit) {
+    habit.name = document.getElementById('edit-habit-name').value;
+    habit.mode = document.getElementById('edit-habit-mode').value;
+    habit.active = document.getElementById('edit-habit-active').checked;
+    
+    renderRhythmCalendar();
+    closeRhythmModal();
+    
+    try {
+      await request('/api/rhythm-habits', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ habits: rhythmHabits }) });
+    } catch (err) { console.error(err); }
+  }
+});
+
+document.getElementById('btn-delete-habit')?.addEventListener('click', async () => {
+  if (!confirm('Delete this habit? Records will remain but the habit will be removed from the list.')) return;
+  const id = document.getElementById('edit-habit-id').value;
+  rhythmHabits = rhythmHabits.filter(h => h.id !== id);
+  
+  renderRhythmCalendar();
+  closeRhythmModal();
+  
+  try {
+    await request('/api/rhythm-habits', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ habits: rhythmHabits }) });
+  } catch (err) { console.error(err); }
+});
+
+window.moveHabit = async function(id, direction) {
+  const idx = rhythmHabits.findIndex(h => h.id === id);
+  if (idx < 0) return;
+  if (direction === -1 && idx === 0) return;
+  if (direction === 1 && idx === rhythmHabits.length - 1) return;
+  
+  const temp = rhythmHabits[idx];
+  rhythmHabits[idx] = rhythmHabits[idx + direction];
+  rhythmHabits[idx + direction] = temp;
+  
+  renderRhythmCalendar();
+  try {
+    await request('/api/rhythm-habits', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ habits: rhythmHabits }) });
+  } catch (err) { console.error(err); }
+};
+
+
+
+window.openRhythmModal = function(type, id = null) {
+  const backdrop = document.getElementById('rhythm-modal-backdrop');
+  const addModal = document.getElementById('rhythm-modal-add');
+  const editModal = document.getElementById('rhythm-modal-edit');
+  
+  // Reset all
+  addModal.style.display = 'none';
+  editModal.style.display = 'none';
+  backdrop.style.display = 'flex';
+  
+  if (type === 'add') {
+    addModal.style.display = 'flex';
+  } else if (type === 'edit') {
+    const habit = rhythmHabits.find(h => h.id === id);
+    if (!habit) return closeRhythmModal();
+    document.getElementById('edit-habit-id').value = habit.id;
+    document.getElementById('edit-habit-name').value = habit.name;
+    document.getElementById('edit-habit-mode').value = habit.mode || 'CHECKBOX';
+    document.getElementById('edit-habit-active').checked = habit.active !== false;
+    editModal.style.display = 'block';
+  }
+};
+
+window.closeRhythmModal = function() {
+  document.getElementById('rhythm-modal-backdrop').style.display = 'none';
+};
+
+document.getElementById('rhythm-modal-backdrop')?.addEventListener('click', (e) => {
+  if (e.target.id === 'rhythm-modal-backdrop') closeRhythmModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.getElementById('rhythm-modal-backdrop')?.style.display === 'flex') {
+    closeRhythmModal();
   }
 });

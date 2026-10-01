@@ -20,7 +20,8 @@
     box-shadow: 0 0 0 4px rgba(128, 128, 128, 0.08);
   }
 </style>
-</head><body><header><a href="#/entries" class="mark">RAJ <i>✦</i> CAPTURE</a><span>Local only · files stay yours</span></header><main><section id="home" class="intro"><p class="label">Your personal notebook</p><h1>What happened?</h1><p>Turn a moment into a page before it disappears. No frontmatter. No code.</p><button class="primary" data-go="capture">Capture something <b>↓</b></button></section><nav class="tabs"><button data-go="capture">Capture</button><button data-go="entries">Entries</button><button data-go="currently">Currently</button><button data-go="life-list">Life list</button></nav>
+</head><body><header><a href="#/entries" class="mark">RAJ <i>✦</i> CAPTURE</a><span>Local only · files stay yours</span></header><main><section id="home" class="intro"><p class="label">Your personal notebook</p><h1>What happened?</h1><p>Turn a moment into a page before it disappears. No frontmatter. No code.</p><button class="primary" data-go="capture">Capture something <b>↓</b></button></section><nav class="tabs"><button data-go="capture">Capture</button><button data-go="entries">Entries</button><button data-go="currently">Currently</button>
+      <button data-go="rhythm">Rhythm</button><button data-go="life-list">Life list</button></nav>
 <div id="capture-workspace" style="display:flex; flex-direction:column; gap:0; align-items:stretch;">
 <section id="capture" class="panel" style="max-width: 600px; margin: 40px auto; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); display: none;">
   <div class="section-title" style="margin-bottom: 24px;">
@@ -37,9 +38,10 @@
 
     <div style="display:flex; gap:16px; margin-bottom: 16px;">
       <label style="flex:1;"><span>Type</span>
-        <select id="type-select" name="type" style="width:100%; padding:8px; border:1px solid var(--line); border-radius:4px; font-family:var(--mono);">
+        <select id="type-select" name="type" style="width:100%; padding:8px; border:1px solid var(--line); border-radius:4px; font-family:var(--mono); background:#fbf8f1; color:var(--ink);">
           <option value="memory">Memory</option>
           <option value="trip">Trip</option>
+          <option value="travel">Travel</option>
           <option value="photo">Photo</option>
           <option value="person">Person</option>
           <option value="car">Car</option>
@@ -53,7 +55,13 @@
         </select>
       </label>
       <label style="flex:1;"><span>World</span>
-        <input id="world-display" readonly disabled value="Life" style="width:100%; padding:8px; border:1px solid var(--line); border-radius:4px; font-family:var(--mono); background:var(--bg-alt); color:var(--text-light);" title="Derived from Type">
+        <select id="world-select" name="world" style="width:100%; padding:8px; border:1px solid var(--line); border-radius:4px; font-family:var(--mono); background:#fbf8f1; color:var(--ink);">
+          <option value="life">Life</option>
+          <option value="travel">Travel</option>
+          <option value="interests">Interests</option>
+          <option value="making">Making</option>
+          <option value="archive">Archive</option>
+        </select>
       </label>
     </div>
 
@@ -107,6 +115,8 @@
       <span id="dirty-indicator" style="color:var(--text-light);">Saved</span>
     </div>
     <div style="display:flex; gap:8px; align-items:center;">
+      <a id="btn-view-public" href="#" target="_blank" class="secondary" style="text-decoration:none; display:inline-flex; align-items:center; gap:4px; padding:5px 9px; border-radius:3px;" title="Open public entry page in a new tab">View Page ↗</a>
+      <button type="button" id="btn-add-photo-stack" class="secondary" title="Insert an interactive photo stack">+ Photo Stack</button>
       <button type="button" id="btn-settings" class="secondary">Page Settings</button>
       <button type="button" id="btn-undo" class="secondary" disabled title="Undo (Cmd/Ctrl + Z)">↩</button>
       <button type="button" id="btn-redo" class="secondary" disabled title="Redo (Cmd/Ctrl + Y)">↪</button>
@@ -138,13 +148,86 @@
   @media (max-width: 600px) {
     #preview-content { padding: 20px 30px 20px 40px; }
   }
+
+  /* Photo Stack Selection on Canvas & Modal */
+  .rc-img-wrapper.rc-photo-selected {
+    outline: 3px solid #2563eb !important;
+    outline-offset: 3px !important;
+    border-radius: 4px;
+    box-shadow: 0 0 0 5px rgba(37,99,235,0.2) !important;
+  }
+  .rc-stack-toggle-btn.is-selected {
+    background: #2563eb !important;
+    color: #fff !important;
+    font-weight: 700 !important;
+  }
+  .photo-stack-thumb-card {
+    width: 76px;
+    height: 76px;
+    position: relative;
+    border-radius: 4px;
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid transparent;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
+    background: #111;
+    user-select: none;
+  }
+  .photo-stack-thumb-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+  }
+  .photo-stack-thumb-card.is-selected {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 1px #2563eb;
+  }
+  .photo-stack-thumb-card .thumb-check-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 18px;
+    height: 18px;
+    background: rgba(0,0,0,0.65);
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 11px;
+    font-weight: bold;
+    backdrop-filter: blur(2px);
+  }
+  .photo-stack-thumb-card.is-selected .thumb-check-badge {
+    background: #2563eb;
+  }
 </style>
   <div id="preview-content"></div>
 </section>
 </div>
-<section id="entries" class="panel" hidden><div class="section-title"><p class="label">Your archive, editable</p><h2>Open any entry to change it.</h2></div><div id="entry-list" class="entry-list"></div></section><section id="currently" class="panel" hidden><div class="section-title"><p class="label">Living layer</p><h2>What is true right now?</h2><p>These are allowed to change. The archive does not.</p></div><form id="currently-form" class="snapshot"></form></section><section id="life-list" class="panel" hidden><div class="section-title"><p class="label">A list for a whole life</p><h2>The life list.</h2></div><form id="life-form" class="life-form"><label>Done <textarea name="done" rows="5" placeholder="One thing per line"></textarea></label><label>Next <textarea name="next" rows="5" placeholder="One thing per line"></textarea></label><label>Someday <textarea name="someday" rows="5" placeholder="One thing per line"></textarea></label><button class="primary">Save life list <b>→</b></button><p class="form-message" role="status"></p></form></section></main><script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/turndown/lib/turndown.browser.umd.js"></script>
-<script type="module" src="/app.js"></script>
+<section id="entries" class="panel" hidden><div class="section-title" style="display:flex; justify-content:space-between; align-items:flex-start;"><div><p class="label">Your archive, editable</p><h2>Open any entry to change it.</h2></div><button class="primary" id="btn-new-entry" style="margin-top:20px;">+ New Entry</button></div><div id="entry-list" class="entry-list"></div></section><section id="currently" class="panel" hidden><div class="section-title"><p class="label">Living layer</p><h2>What is true right now?</h2><p>These are allowed to change. The archive does not.</p></div><form id="currently-form" class="snapshot"></form></section><section id="life-list" class="panel" hidden><div class="section-title"><p class="label">A list for a whole life</p><h2>The life list.</h2></div><form id="life-form" class="life-form"><label>Done <textarea name="done" rows="5" placeholder="One thing per line"></textarea></label><label>Next <textarea name="next" rows="5" placeholder="One thing per line"></textarea></label><label>Someday <textarea name="someday" rows="5" placeholder="One thing per line"></textarea></label><button class="primary">Save life list <b>→</b></button><p class="form-message" role="status"></p></form></section>
+<section id="rhythm" class="panel" hidden style="background:var(--bg); z-index:10; position:relative;">
+  <div class="section-title" style="display:flex; justify-content:space-between; align-items:flex-start;">
+    <div>
+      <p class="label">Rhythm</p>
+      <h2>Daily Habits.</h2>
+      <p>A visual record of how I spend my days.</p>
+    </div>
+    <button class="primary" id="btn-add-habits" style="margin-top:20px;">+ Add Habits</button>
+  </div>
+  
+  <div id="rhythm-calendar-container" style="margin-top: 24px; overflow-x:auto;">
+    <!-- Rendered via JS -->
+  </div>
+  <p class="form-message" id="rhythm-message" role="status" style="margin-top: 16px;"></p>
+</section>
+
+
+
+
+
+
+
 <!-- IMAGE STUDIO MODAL -->
 <div id="image-studio-modal" hidden>
   <div id="image-studio-panel">
@@ -226,5 +309,165 @@
     </div>
   </div>
 </div>
+
+<!-- RHYTHM MODALS -->
+<div id="rhythm-modal-backdrop" style="display:none; position:fixed; top:0; left:0; inset:0; width:100vw; height:100vh; background:rgba(25, 23, 20, 0.92); backdrop-filter:blur(3px); z-index:2000; justify-content:center; align-items:center; padding: 20px; box-sizing: border-box;">
+  
+  <!-- Add Habits -->
+  <div id="rhythm-modal-add" style="display:none; background:var(--paper); border:1px solid var(--line); border-radius:6px; width:100%; max-width:620px; height:85vh; max-height:720px; display:flex; flex-direction:column; position:relative; box-shadow: 0 24px 48px rgba(0,0,0,0.2); overflow:hidden;">
+    <div style="padding:32px 32px 24px 32px; flex-shrink:0;">
+      <h3 style="margin:0; font-family:var(--serif); font-size:1.75rem; font-weight:400; color:var(--text);">Add Habits</h3>
+      <p style="margin:8px 0 0 0; color:var(--text-light); font-size:0.9rem;">Select presets to track in your Rhythm.</p>
+    </div>
+    
+    <div id="habits-presets-container" style="flex:1 1 auto; min-height:0; overflow-y:auto; padding:0 32px; display:flex; flex-direction:column; gap:8px;">
+      <!-- Populated via JS -->
+    </div>
+    
+    <div style="padding:24px 32px; flex-shrink:0; border-top:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; background:var(--paper); border-radius: 0 0 6px 6px;">
+      <button type="button" class="secondary" onclick="closeRhythmModal()" style="border:none; padding:8px 0; opacity:0.6; cursor:pointer; background:none;">Cancel</button>
+      <button class="primary" id="btn-save-habits">Add selected</button>
+    </div>
+  </div>
+
+  <!-- Edit Habit -->
+  <div id="rhythm-modal-edit" hidden style="background:var(--paper); border:1px solid var(--line); border-radius:6px; width:100%; max-width:440px; padding:40px; position:relative; box-shadow: 0 24px 48px rgba(0,0,0,0.2);">
+    <h3 style="margin:0 0 32px 0; font-family:var(--serif); font-size:1.75rem; font-weight:400; color:var(--text);">Edit Habit</h3>
+    <form id="edit-habit-form" style="display:flex; flex-direction:column; gap:24px;">
+      <input type="hidden" id="edit-habit-id">
+      
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <label style="font-size:11px; font-family:var(--mono); color:var(--text-light); text-transform:uppercase; letter-spacing:0.05em;">Name</label>
+        <input type="text" id="edit-habit-name" required style="background:transparent; border:1px solid var(--line); border-radius:4px; padding:10px 12px; font-family:var(--mono); font-size:15px; color:var(--text); width:100%; box-sizing: border-box; outline:none;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--line)'">
+      </div>
+      
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <label style="font-size:11px; font-family:var(--mono); color:var(--text-light); text-transform:uppercase; letter-spacing:0.05em;">Mode</label>
+        <select id="edit-habit-mode" style="background:transparent; border:1px solid var(--line); border-radius:4px; padding:10px 12px; font-family:var(--mono); font-size:15px; color:var(--text); width:100%; box-sizing: border-box; outline:none; cursor:pointer;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--line)'">
+          <option value="CHECKBOX">Checkbox (Done / Not done)</option>
+          <option value="NUMBER">Number (e.g. 5 km)</option>
+          <option value="DURATION">Duration (e.g. 45 mins)</option>
+          <option value="TIME_TARGET">Time Target (e.g. Sleep > 7h)</option>
+        </select>
+      </div>
+      
+      <label style="display:flex; align-items:flex-start; gap:12px; cursor:pointer; font-family:var(--mono); font-size:14px; margin-top:8px;">
+        <input type="checkbox" id="edit-habit-active" style="margin-top:2px;"> 
+        <span style="line-height:1.4;">Active<br><span style="font-size:12px; color:var(--text-light); opacity:0.8;">Uncheck to archive without deleting data.</span></span>
+      </label>
+      
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; padding-top:32px; border-top:1px solid var(--line);">
+        <button type="button" id="btn-delete-habit" style="background:none; border:none; color:#d9534f; font-family:var(--mono); font-size:13px; cursor:pointer; padding:0; opacity:0.9;">Delete...</button>
+        <div style="display:flex; gap:20px; align-items:center;">
+          <button type="button" class="secondary" onclick="closeRhythmModal()" style="border:none; padding:8px 0; opacity:0.6; cursor:pointer; background:none;">Cancel</button>
+          <button type="submit" class="primary" style="padding:10px 24px; font-size:14px;">Save</button>
+        </div>
+      </div>
+    </form>
+  </div>
+<!-- FLOATING PHOTO STACK SELECTION BAR -->
+<div id="canvas-photo-stack-bar" style="display:none; position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#18181b; color:#fff; padding:8px 16px; border-radius:30px; box-shadow:0 12px 32px rgba(0,0,0,0.35); z-index:1500; align-items:center; gap:12px; font-family:var(--mono); font-size:12px; border:1px solid #3f3f46;">
+  <span style="display:inline-flex; align-items:center; gap:6px;">
+    <span style="font-size:14px;">🎴</span>
+    <span id="canvas-photo-stack-count">0 photos selected</span>
+  </span>
+  <span style="opacity:0.3;">|</span>
+  <button type="button" id="btn-canvas-clear-stack-sel" style="background:none; border:none; color:#a1a1aa; cursor:pointer; text-decoration:underline; font-size:11px; font-family:inherit;">Clear</button>
+  <button type="button" id="btn-canvas-create-stack" style="background:#2563eb; color:#fff; border:none; padding:6px 14px; border-radius:18px; cursor:pointer; font-weight:600; font-size:11px; font-family:inherit; box-shadow:0 2px 6px rgba(37,99,235,0.4);">Turn into Stack →</button>
+</div>
+
+<!-- PHOTO STACK BUILDER MODAL -->
+<div id="photo-stack-modal-backdrop" style="display:none; position:fixed; top:0; left:0; inset:0; width:100vw; height:100vh; background:rgba(25, 23, 20, 0.88); backdrop-filter:blur(3px); z-index:2000; justify-content:center; align-items:center; padding: 20px; box-sizing: border-box;">
+  <div id="photo-stack-modal-card" style="background:var(--paper); border:1px solid var(--line); border-radius:6px; width:100%; max-width:620px; max-height:90vh; display:flex; flex-direction:column; position:relative; box-shadow: 0 24px 48px rgba(0,0,0,0.2); overflow:hidden; padding:24px; box-sizing:border-box;">
+    
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+      <div>
+        <p class="label" style="margin:0 0 4px 0; font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-light);">Presentation</p>
+        <h3 style="margin:0; font-size:18px; font-family:Fraunces, Georgia, serif; font-weight:500;">Create Photo Stack</h3>
+      </div>
+      <button type="button" id="btn-close-photo-stack-modal" style="background:none; border:none; font-size:18px; cursor:pointer; color:var(--text-light); padding:4px 8px; line-height:1;">✕</button>
+    </div>
+
+    <p style="font-size:12px; color:var(--text-light); margin:0 0 14px 0; line-height:1.4;">
+      Group multiple photos into an interactive swipeable polaroid stack. Readers can click, drag, or swipe through them.
+    </p>
+
+    <!-- SECTION 1: STORY PHOTOS -->
+    <div id="photo-stack-story-section" style="margin-bottom:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <span style="font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.05em; font-weight:600; color:var(--text);">Photos on this Page</span>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button type="button" id="btn-select-all-story-photos" style="font-size:11px; font-family:var(--mono); background:none; border:none; color:var(--ink); text-decoration:underline; cursor:pointer; padding:0;">Select All</button>
+          <span style="opacity:0.4; font-size:11px;">·</span>
+          <button type="button" id="btn-clear-story-photos" style="font-size:11px; font-family:var(--mono); background:none; border:none; color:var(--text-light); text-decoration:underline; cursor:pointer; padding:0;">Clear</button>
+        </div>
+      </div>
+      <div id="photo-stack-page-photos-grid" style="display:flex; gap:8px; overflow-x:auto; padding:8px; border:1px solid var(--line); border-radius:4px; background:var(--bg); min-height:86px; align-items:center; box-sizing:border-box;">
+        <div style="font-size:11px; color:var(--text-light); font-family:var(--mono); padding:12px; text-align:center; width:100%;">
+          Scanning page for photos...
+        </div>
+      </div>
+    </div>
+
+    <!-- Upload trigger / Add button -->
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+      <label class="secondary" style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; padding:6px 12px; border-radius:4px; font-family:var(--mono); font-size:11px; border:1px dashed var(--line); background:var(--bg); color:var(--text);">
+        <span>+ Upload More Photos</span>
+        <input type="file" id="photo-stack-file-input" multiple accept="image/*" style="display:none;">
+      </label>
+      <span id="photo-stack-status" style="font-size:11px; font-family:var(--mono); color:var(--text-light);"></span>
+    </div>
+
+    <!-- Photo Sizing & Cropping Mode -->
+    <div style="margin-bottom:12px; padding:8px 12px; background:var(--bg); border:1px solid var(--line); border-radius:4px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <span style="font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.05em; font-weight:600; color:var(--text);">Photo Sizing / Framing</span>
+        <span style="font-size:10px; color:var(--text-light); font-family:var(--mono);">Readers also get a ⤢ toggle on card</span>
+      </div>
+      <div style="display:flex; gap:16px; align-items:center; font-family:var(--mono); font-size:11px; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="radio" name="photo-stack-fit-mode" value="contain" checked style="accent-color:#2563eb; cursor:pointer;">
+          <span><strong>Full Photo (No Crop)</strong> — see 100% of image</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="radio" name="photo-stack-fit-mode" value="cover" style="accent-color:#2563eb; cursor:pointer;">
+          <span><strong>Fill Frame (Crop)</strong> — uniform polaroid fill</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- SECTION 2: STACK CARDS -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+      <span style="font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.05em; font-weight:600; color:var(--text);">Cards in this Stack (order & captions)</span>
+      <span id="photo-stack-count-badge" style="font-family:var(--mono); font-size:11px; color:var(--text-light);">0 cards</span>
+    </div>
+
+    <!-- Scrollable list of photos in stack -->
+    <div id="photo-stack-items-list" style="flex:1; overflow-y:auto; border:1px solid var(--line); border-radius:4px; padding:10px; display:flex; flex-direction:column; gap:8px; min-height:140px; max-height:240px; background:var(--bg); box-sizing:border-box;">
+      <div id="photo-stack-empty-msg" style="text-align:center; padding:32px 16px; color:var(--text-light); font-size:12px; font-family:var(--mono);">
+        No photos selected yet.<br>Click photos above or "+ Upload More Photos" to add to this stack.
+      </div>
+    </div>
+
+    <!-- Replace original photos checkbox -->
+    <div id="photo-stack-replace-row" style="margin-top:10px; padding:8px 12px; background:var(--bg); border:1px solid var(--line); border-radius:4px;">
+      <label style="display:flex; align-items:center; gap:8px; font-size:11px; font-family:var(--mono); cursor:pointer; color:var(--text); margin:0;">
+        <input type="checkbox" id="photo-stack-replace-checkbox" checked style="accent-color:#2563eb; cursor:pointer;">
+        <span>Replace selected photos in story with this stack</span>
+      </label>
+    </div>
+
+    <!-- Modal actions -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; padding-top:14px; border-top:1px solid var(--line);">
+      <button type="button" id="btn-cancel-photo-stack" class="secondary" style="padding:8px 16px; font-family:var(--mono); font-size:12px; border:1px solid var(--line); border-radius:4px; background:transparent; cursor:pointer;">Cancel</button>
+      <button type="button" id="btn-insert-photo-stack" class="primary" style="padding:8px 20px; font-family:var(--mono); font-size:12px; border-radius:4px; background:var(--ink); color:var(--paper); cursor:pointer;" disabled>Insert Stack</button>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/turndown/lib/turndown.browser.umd.js"></script>
+<script type="module" src="/app.js"></script>
 
 </body></html>

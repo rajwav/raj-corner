@@ -60,7 +60,7 @@ function rowDate(d?: Date) {
             {byYear[year].map(entry => (
               <div class="archive-row" data-tags={entry.data.tags.join('|')}>
                 <div class="row-date">{rowDate(entry.data.date)}</div>
-                <div class="row-type">{entry.data.type}</div>
+                <div class="row-type">{entry.data.type?.toUpperCase()}</div>
                 <div class="row-main">
                   <a href={`/entry/${entry.id}/`} class="row-title">{entry.data.title}</a>
                   {entry.data.tags.length > 0 && (
@@ -87,7 +87,7 @@ function rowDate(d?: Date) {
             {noYear.map(entry => (
               <div class="archive-row" data-tags={entry.data.tags.join('|')}>
                 <div class="row-date">{rowDate(entry.data.date)}</div>
-                <div class="row-type">{entry.data.type}</div>
+                <div class="row-type">{entry.data.type?.toUpperCase()}</div>
                 <div class="row-main">
                   <a href={`/entry/${entry.id}/`} class="row-title">{entry.data.title}</a>
                   {entry.data.tags.length > 0 && (

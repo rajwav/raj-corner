@@ -3229,3 +3229,233 @@ img[src*="t=no-frame"], .cover-treatment-no-frame img { border-radius: 0; box-sh
   position: absolute; border: 2px solid white; box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);
   background: transparent; box-sizing: border-box;
 }
+
+/* ==========================================================================
+   PHOTO STACK: Loose Polaroid Deck with Interactive Swipe Physics
+   ========================================================================== */
+.photo-stack-container {
+  margin: 3.5rem auto;
+  max-width: 440px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  user-select: none;
+  -webkit-user-select: none;
+  perspective: 1000px;
+  box-sizing: border-box;
+}
+
+.photo-stack-deck {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  aspect-ratio: 4 / 5;
+  min-height: 440px;
+  cursor: grab;
+  touch-action: pan-y;
+}
+
+.photo-stack-deck:active {
+  cursor: grabbing;
+}
+
+.photo-stack-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #fdfbf7;
+  border-radius: 4px;
+  padding: 14px 14px 22px 14px;
+  box-shadow:
+    0 1px 3px rgba(30, 37, 30, 0.08),
+    0 6px 16px rgba(30, 37, 30, 0.1),
+    0 12px 28px rgba(30, 37, 30, 0.06);
+  border: 1px solid rgba(30, 37, 30, 0.12);
+  display: flex;
+  flex-direction: column;
+  transform-origin: center 85%;
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s ease;
+  will-change: transform, opacity;
+  box-sizing: border-box;
+}
+
+.photo-stack-card.is-top {
+  box-shadow:
+    0 2px 5px rgba(30, 37, 30, 0.1),
+    0 10px 24px rgba(30, 37, 30, 0.15),
+    0 20px 40px rgba(30, 37, 30, 0.1);
+}
+
+.photo-stack-card.swiping-out {
+  transition: transform 0.26s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.22s ease !important;
+  pointer-events: none;
+}
+
+.photo-stack-card.swiping-in {
+  transition: transform 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.15), opacity 0.28s ease !important;
+}
+
+.photo-stack-photo-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: #1e251e;
+  border-radius: 2px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photo-stack-photo-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  transition: object-fit 0.2s ease, object-position 0.2s ease;
+}
+
+/* Photo Stack Fit Modes */
+.photo-stack-container.fit-contain .photo-stack-photo-frame img {
+  object-fit: contain !important;
+  background: #141416;
+}
+
+.photo-stack-container.fit-cover .photo-stack-photo-frame img {
+  object-fit: cover !important;
+}
+
+/* Card-level overrides */
+.photo-stack-photo-frame img[data-fit="contain"] {
+  object-fit: contain !important;
+  background: #141416;
+}
+
+.photo-stack-photo-frame img[data-fit="cover"] {
+  object-fit: cover !important;
+}
+
+.photo-stack-photo-frame img[data-pos="top"] {
+  object-position: top center !important;
+}
+
+.photo-stack-photo-frame img[data-pos="bottom"] {
+  object-position: bottom center !important;
+}
+
+.photo-stack-photo-frame img[data-pos="center"] {
+  object-position: center center !important;
+}
+
+.photo-stack-photo-frame img[data-pos="left"] {
+  object-position: center left !important;
+}
+
+.photo-stack-photo-frame img[data-pos="right"] {
+  object-position: center right !important;
+}
+
+.photo-stack-caption {
+  margin-top: 12px;
+  padding: 0 4px;
+  min-height: 20px;
+  font-family: "Fraunces", Georgia, serif;
+  font-style: italic;
+  font-size: 13px;
+  color: var(--ink);
+  text-align: center;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.photo-stack-caption.empty {
+  min-height: 6px;
+  margin-top: 4px;
+}
+
+.photo-stack-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 18px;
+  font-family: "DM Mono", monospace;
+  font-size: 11px;
+  color: var(--ink);
+}
+
+.photo-stack-btn {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  transition: background 0.15s, transform 0.15s, border-color 0.15s;
+}
+
+.photo-stack-btn.fit-toggle {
+  width: auto;
+  height: 28px;
+  border-radius: 14px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-family: "DM Mono", monospace;
+  font-weight: 500;
+  gap: 4px;
+  opacity: 0.8;
+}
+
+.photo-stack-btn.fit-toggle:hover {
+  opacity: 1;
+  border-color: var(--ink);
+}
+
+.photo-stack-btn:hover {
+  background: #ffffff;
+  border-color: var(--ink);
+  transform: scale(1.06);
+}
+
+.photo-stack-btn:active {
+  transform: scale(0.94);
+}
+
+.photo-stack-btn:disabled,
+.photo-stack-btn[disabled] {
+  opacity: 0.28 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  border-color: var(--line) !important;
+  background: var(--paper) !important;
+}
+
+.photo-stack-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  letter-spacing: 0.05em;
+  opacity: 0.8;
+}
+
+.photo-stack-tip {
+  opacity: 0.5;
+  font-size: 10px;
+  margin-left: 2px;
+}
+

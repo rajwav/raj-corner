@@ -1,7 +1,7 @@
 ---
 import Base from '../../layouts/Base.astro';
 import EntryList from '../../components/EntryList.astro';
-import { entries, worlds, worldForType, niceDate, placeSlug } from '../../lib/universe';
+import { entries, worlds, entryWorld, niceDate, placeSlug } from '../../lib/universe';
 
 export async function getStaticPaths() {
   return worlds.filter(([slug]) => !['archive','me'].includes(slug)).map(([world]) => ({ params:{world} }));
@@ -9,7 +9,7 @@ export async function getStaticPaths() {
 
 const { world } = Astro.params;
 const definition = worlds.find(([slug])=>slug===world)!;
-const found = (await entries()).filter(entry => worldForType(entry.data.type) === world);
+const found = (await entries()).filter(entry => entryWorld(entry) === world);
 
 // Sort for Travel and Life
 const sortedEntries = found.slice().sort((a, b) => {

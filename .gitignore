@@ -3,3 +3,7 @@ dist/
 .astro/
 reference/
 .DS_Store
+.vercel/
+.trash/
+.env
+.env.*

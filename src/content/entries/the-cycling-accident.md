@@ -53,7 +53,7 @@ Two brothers who happened to be there were **VIMSAR students**. I didn't know th
 
 One memory I especially want to preserve is the video I took while I was being taken through the hospital on the stretcher. **Abhisekh and Nihar can be seen helping with the stretcher** in the video. I was mostly just lying there and sleeping while everything around me was being handled by other people. Looking back, that video captures something important about that day—not just that I was injured, but that people were actually there helping me when I couldn't manage everything myself.
 
-![IMG_0728.MOV](/uploads/1789188909729-img-0728.mov)
+![IMG_0728.MP4](/uploads/1789188909729-img-0728.mp4)
 
 ## 09 — VIMSAR
 

@@ -47153,6 +47153,25 @@ function Qr(e6) {
     },
     key: "file",
     ...e6.dictionary.slash_menu.file
+  }), t3.push({
+    onItemClick: () => {
+      try {
+        let n3 = e6.getTextCursorPosition()?.block;
+        if (n3 && Array.isArray(n3.content) && (n3.content.length === 0 || (n3.content.length === 1 && n3.content[0].type === "text" && (n3.content[0].text === "/" || !n3.content[0].text.trim())))) {
+          e6.updateBlock(n3, { type: "paragraph", content: [] });
+        }
+      } catch (err) {}
+      try {
+        e6.getExtension(Xr)?.closeMenu();
+      } catch (err) {}
+      try {
+        e6.getExtension(Z)?.store.setState(false);
+      } catch (err) {}
+      const btn = document.getElementById('btn-add-photo-stack');
+      if (btn) btn.click();
+    },
+    key: "photo_stack",
+    ...e6.dictionary.slash_menu.photo_stack
   }), X(e6, "heading", {
     level: "number",
     isToggleable: "boolean"
@@ -50401,6 +50420,20 @@ var e3 = {
         "embed",
         "media",
         "url"
+      ],
+      group: "Media"
+    },
+    photo_stack: {
+      title: "Photo Stack",
+      subtext: "Swipable polaroid card stack",
+      aliases: [
+        "stack",
+        "photo stack",
+        "photos",
+        "deck",
+        "polaroid",
+        "cards",
+        "gallery"
       ],
       group: "Media"
     },
@@ -60778,6 +60811,20 @@ function Kt4(e6) {
     }]
   })(e6);
 }
+function photoStackIcon(e6) {
+  return Z5({
+    tag: "svg",
+    attr: {
+      viewBox: "0 0 24 24",
+      fill: "currentColor"
+    },
+    child: [{
+      tag: "path",
+      attr: { d: "M22 16V4c0-1.1-.9-2-2-2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2zm-11-4l2.03 2.71L16 11l4 5H8l3-4zM2 6v14c0 1.1.9 2 2 2h14v-2H4V6H2z" },
+      child: []
+    }]
+  })(e6);
+}
 function qt4(e6) {
   return Z5({
     tag: "svg",
@@ -62914,6 +62961,7 @@ var Jr3 = {
   paragraph: Xt4,
   table: Zt4,
   image: qt4,
+  photo_stack: photoStackIcon,
   video: Jt4,
   audio: Ht4,
   file: En3,
@@ -74248,6 +74296,20 @@ var ht4 = {
 // capture/blocknote-editor.jsx
 var import_jsx_runtime93 = __toESM(require_jsx_runtime(), 1);
 async function uploadMedia(file) {
+  try {
+    const rawRes = await fetch("/api/upload-raw?name=" + encodeURIComponent(file.name), {
+      method: "POST",
+      headers: { "content-type": file.type || "application/octet-stream" },
+      body: file
+    });
+    if (rawRes.ok) {
+      const payload2 = await rawRes.json().catch(() => ({}));
+      if (payload2.url) return payload2.url;
+    }
+  } catch (rawErr) {
+    console.warn("Direct upload fallback", rawErr);
+  }
+
   const dataUrl = await new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
@@ -74299,6 +74361,7 @@ function mountBlockNotePOC(containerId, initialMarkdown) {
     root.unmount();
     currentEditor = null;
   }
+  let isReady = false;
   root = (0, import_client2.createRoot)(container);
   root.render(
     /* @__PURE__ */ (0, import_jsx_runtime93.jsx)(
@@ -74307,7 +74370,11 @@ function mountBlockNotePOC(containerId, initialMarkdown) {
         initialMarkdown,
         onChange: (ed) => {
           currentEditor = ed;
-          if (typeof window.markDirty === "function") window.markDirty();
+          if (isReady) {
+            if (typeof window.markDirty === "function") window.markDirty();
+          } else {
+            isReady = true;
+          }
         }
       }
     )
@@ -74343,13 +74410,101 @@ function redoStory() {
     return false;
   }
 }
+async function insertMarkdownAtCursor(markdown) {
+  if (!currentEditor) return false;
+  try {
+    const blocks = await currentEditor.tryParseMarkdownToBlocks(markdown);
+    if (!blocks || blocks.length === 0) return false;
+    const currentBlock = currentEditor.getTextCursorPosition()?.block;
+    if (currentBlock) {
+      const isEmpty = Array.isArray(currentBlock.content) && (currentBlock.content.length === 0 || (currentBlock.content.length === 1 && currentBlock.content[0].type === "text" && (!currentBlock.content[0].text || !currentBlock.content[0].text.trim())));
+      if (isEmpty) {
+        currentEditor.replaceBlocks([currentBlock], blocks);
+      } else {
+        currentEditor.insertBlocks(blocks, currentBlock, 'after');
+      }
+    } else {
+      const lastBlock = currentEditor.document[currentEditor.document.length - 1];
+      if (lastBlock) {
+        currentEditor.insertBlocks(blocks, lastBlock, 'after');
+      } else {
+        currentEditor.replaceBlocks(currentEditor.document, blocks);
+      }
+    }
+    const lastInserted = blocks[blocks.length - 1];
+    if (lastInserted) {
+      try {
+        currentEditor.setTextCursorPosition(lastInserted, 'end');
+      } catch (e6) {}
+    }
+    return true;
+  } catch (err) {
+    console.error('Failed to insert markdown blocks', err);
+    return false;
+  }
+}
+
+function getStoryImages() {
+  if (!currentEditor) return [];
+  const images = [];
+  try {
+    for (const block of currentEditor.document) {
+      if (block.type === 'image' && block.props?.url) {
+        images.push({
+          blockId: block.id,
+          url: block.props.url,
+          caption: block.props.caption || block.props.name || '',
+          name: block.props.name || ''
+        });
+      }
+    }
+  } catch (err) {
+    console.error('getStoryImages error', err);
+  }
+  return images;
+}
+
+async function replaceImagesWithStack(blockIdsToReplace, stackMarkdown) {
+  if (!currentEditor) return false;
+  try {
+    const blocks = await currentEditor.tryParseMarkdownToBlocks(stackMarkdown);
+    if (!blocks || blocks.length === 0) return false;
+
+    if (Array.isArray(blockIdsToReplace) && blockIdsToReplace.length > 0) {
+      let targetBlock = null;
+      for (const id of blockIdsToReplace) {
+        try {
+          const b = currentEditor.getBlock(id);
+          if (b) { targetBlock = b; break; }
+        } catch (e) {}
+      }
+
+      if (targetBlock) {
+        currentEditor.insertBlocks(blocks, targetBlock, 'before');
+        for (const id of blockIdsToReplace) {
+          try { currentEditor.removeBlocks([id]); } catch (e) {}
+        }
+        return true;
+      }
+    }
+
+    return insertMarkdownAtCursor(stackMarkdown);
+  } catch (err) {
+    console.error('replaceImagesWithStack error', err);
+    return insertMarkdownAtCursor(stackMarkdown);
+  }
+}
+
 export {
   getBlockNoteMarkdown,
   isBlockNoteReady,
   mountBlockNotePOC,
   redoStory,
   undoStory,
-  unmountBlockNotePOC
+  unmountBlockNotePOC,
+  insertMarkdownAtCursor,
+  getStoryImages,
+  replaceImagesWithStack
 };
 /*! Bundled license information:
 

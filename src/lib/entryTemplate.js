@@ -92,15 +92,23 @@ export function renderPersonTraces(traces, niceDateFn) {
     <div class="person-traces">
       <h3>TRACES OF THIS PERSON</h3>
       <ul class="person-trace-list">
-        ${traces.map(trace => `
+        ${traces.map(trace => {
+          const d = trace.data || trace || {};
+          const traceDate = d.date ? niceDateFn(d.date) : 'Undated';
+          const title = d.title || trace.title || 'Untitled';
+          const type = d.type || trace.type || '';
+          const location = d.location || trace.location || '';
+          const id = trace.id || trace.slug || '';
+          return `
           <li>
-            <span class="trace-date">${trace.data.date ? niceDateFn(trace.data.date) : 'Undated'}</span>
+            <span class="trace-date">${traceDate}</span>
             <div class="trace-info">
-              <a href="/entry/${trace.id}/" class="trace-link">${escapeHtml(trace.data.title)}</a>
-              <span class="trace-meta">${escapeHtml(trace.data.type)} ${trace.data.location ? `<span class="meta-separator">·</span> ${escapeHtml(trace.data.location)}` : ''}</span>
+              <a href="/entry/${id}/" class="trace-link">${escapeHtml(title)}</a>
+              <span class="trace-meta">${escapeHtml(type)} ${location ? `<span class="meta-separator">·</span> ${escapeHtml(location)}` : ''}</span>
             </div>
           </li>
-        `).join('')}
+        `;
+        }).join('')}
       </ul>
     </div>
   `;

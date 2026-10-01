@@ -1,5 +1,21 @@
 ---
+import { transformPhotoStacks } from '../lib/photoStack.js';
+
 const html = await Astro.slots.render('default');
-const transformed = html.replace(/<img[^>]*src="([^"]+\.(?:mp4|mov|webm|ogg))"[^>]*>/gi, '<video controls preload="metadata" src="$1"></video>');
+let transformed = html.replace(/<img([^>]*src="([^"]+\.(?:mp4|mov|webm|ogg)[^"]*)"[^>]*)>/gi, (match, attrs, src) => {
+  const cleanSrc = src.split('#')[0];
+  const titleMatch = attrs.match(/title="([^"]*)"/);
+  const title = titleMatch ? titleMatch[1] : '';
+  const wMatch = title.match(/w=([^,\s]+)/);
+  const aMatch = title.match(/a=([^,\s]+)/);
+  const width = wMatch ? wMatch[1] : '100%';
+  const align = aMatch ? aMatch[1] : 'center';
+
+  const wrapperStyle = `text-align:${align};margin:1.5em 0;`;
+  const videoStyle = `max-width:100%;width:${width};height:auto;display:inline-block;vertical-align:middle;border-radius:4px;`;
+  return `<div class="story-video-container" style="${wrapperStyle}"><video controls preload="metadata" playsinline src="${cleanSrc}" style="${videoStyle}"></video></div>`;
+});
+transformed = transformPhotoStacks(transformed);
 ---
 <Fragment set:html={transformed} />
+
