@@ -1,6 +1,7 @@
 ---
 import { getCollection, render } from "astro:content";
 import MediaTransform from "../../components/MediaTransform.astro";
+import MusicEntry from '../../components/MusicEntry.astro';
 import Base from '../../layouts/Base.astro';
 import { niceDate, placeSlug, entryWorld } from '../../lib/universe';
 import { parseMentionsInText } from '../../lib/mentions';
@@ -104,19 +105,25 @@ if (entry.data.type === 'person') {
 
 ---
 <Base title={`${entry.data.title} · Raj's Corner`}>
-    <article class={`artifact-page ${entry.data.accent} ${entry.data.type === 'person' ? 'person-artifact' : ''} ${getPresentationClasses(entry.data.presentation)}`}>
-    <div set:html={renderEntryHeader(entry.data, entry.data.type === 'person', niceDate(entry.data.date), placeSlug(entry.data.location || ''), entryWorld(entry))} />
-    <div set:html={renderEntryCover(entry.data, entry.data.type === 'person', niceDate(entry.data.date))} />
+  {entry.data.type === 'music' ? (
+    <MusicEntry entry={entry} Content={Content} curatedThreads={curatedThreads} all={all} />
+  ) : (
+    <>
+      <article class={`artifact-page ${entry.data.accent} ${entry.data.type === 'person' ? 'person-artifact' : ''} ${getPresentationClasses(entry.data.presentation)}`}>
+        <div set:html={renderEntryHeader(entry.data, entry.data.type === 'person', niceDate(entry.data.date), placeSlug(entry.data.location || ''), entryWorld(entry))} />
+        <div set:html={renderEntryCover(entry.data, entry.data.type === 'person', niceDate(entry.data.date))} />
 
-    <div class={`artifact-body ${entry.data.type === 'person' ? 'person-body' : ''}`}>
-      <div class="prose"><MediaTransform><Content /></MediaTransform></div>
-      <div set:html={renderEntryTags(entry.data.tags)} />
-    </div>
-    
-    <div set:html={renderPersonTraces(personTraces, niceDate)} />
-  </article>
+        <div class={`artifact-body ${entry.data.type === 'person' ? 'person-body' : ''}`}>
+          <div class="prose"><MediaTransform><Content /></MediaTransform></div>
+          <div set:html={renderEntryTags(entry.data.tags)} />
+        </div>
+        
+        <div set:html={renderPersonTraces(personTraces, niceDate)} />
+      </article>
 
-<div set:html={renderContinuation(curatedThreads)} />
+      <div set:html={renderContinuation(curatedThreads)} />
+    </>
+  )}
 
 <script>
   import { initPhotoStacks } from '../../lib/photoStack.js';

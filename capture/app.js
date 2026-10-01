@@ -26,6 +26,17 @@ window.goToEditor = function() {
 };
 
 document.getElementById('btn-continue-editor')?.addEventListener('click', window.goToEditor);
+document.getElementById('btn-save-setup')?.addEventListener('click', async () => {
+  try {
+    await saveCurrentEntry();
+  } catch (err) {
+    const msg = document.getElementById('message');
+    if (msg) {
+      msg.textContent = err.message;
+      msg.style.color = '#dc2626';
+    }
+  }
+});
 document.getElementById('btn-back-setup')?.addEventListener('click', window.goToSetup);
 document.getElementById('type-select')?.addEventListener('change', (e) => {
   activeType = e.target.value;
@@ -202,6 +213,14 @@ function initializeNewEntry(type = 'memory'){
   if(form.elements.location)form.elements.location.value='';
   if(form.elements.people)form.elements.people.value='';
   if(form.elements.newTag)form.elements.newTag.value='';
+  if(form.elements.musicSong)form.elements.musicSong.value='';
+  if(form.elements.musicArtist)form.elements.musicArtist.value='';
+  if(form.elements.musicAlbum)form.elements.musicAlbum.value='';
+  if(form.elements.musicYear)form.elements.musicYear.value='';
+  if(form.elements.musicMood)form.elements.musicMood.value='';
+  if(form.elements.musicWhy)form.elements.musicWhy.value='';
+  if(form.elements.musicAudio)form.elements.musicAudio.value='';
+  if(form.elements.musicLink)form.elements.musicLink.value='';
   form.elements.date.value=today();
   form.elements.cover.value='';
   if(form.elements.presentation)form.elements.presentation.value='{}';
@@ -225,6 +244,25 @@ function setupForm(type,data={}){ if (typeof previewBtn !== 'undefined' && previ
   if ($('#type-label')) $('#type-label').textContent=type;
   if ($('#form-title')) $('#form-title').textContent=heading;
   
+  const isMusic = type === 'music';
+  const musicContainer = $('#music-fields-container');
+  const standardContainer = $('#standard-fields-container');
+  if (musicContainer) musicContainer.style.display = isMusic ? 'block' : 'none';
+  if (standardContainer) standardContainer.style.display = isMusic ? 'none' : 'block';
+
+  const form = $('#entry-form');
+  if (isMusic && form) {
+    if (form.elements.musicSong) form.elements.musicSong.value = data.title || '';
+    if (form.elements.musicArtist) form.elements.musicArtist.value = data.artist || '';
+    if (form.elements.musicAlbum) form.elements.musicAlbum.value = data.album || '';
+    if (form.elements.musicYear) form.elements.musicYear.value = data.year || '';
+    if (form.elements.musicMood) form.elements.musicMood.value = Array.isArray(data.mood) ? data.mood.join(', ') : (data.mood || '');
+    if (form.elements.musicWhy) form.elements.musicWhy.value = data.description || data.story || '';
+    if (form.elements.musicAudio) form.elements.musicAudio.value = data.audio || '';
+    if (form.elements.musicLink) form.elements.musicLink.value = data.link || '';
+    if (form.elements.status && !data.id) form.elements.status.value = 'past';
+  }
+
   if (type === 'person') {
     if ($('#title-field span')) $('#title-field span').textContent = 'NAME';
     $('#entry-form').elements.title.placeholder = 'Who is this?';
@@ -809,20 +847,60 @@ async function collectCurrentEntryState() {
   const worldSelect = document.getElementById('world-select');
   const selectedWorld = worldSelect?.value || typeWorld[selectedType] || 'life';
 
+  let title = form.elements.title ? form.elements.title.value.trim() : '';
+  let artist = '';
+  let album = '';
+  let year = '';
+  let mood = [];
+  let audio = '';
+  let link = '';
+  let description = form.elements.description ? form.elements.description.value.trim() : '';
+
+  if (selectedType === 'music') {
+    const song = form.elements.musicSong ? form.elements.musicSong.value.trim() : '';
+    artist = form.elements.musicArtist ? form.elements.musicArtist.value.trim() : '';
+    album = form.elements.musicAlbum ? form.elements.musicAlbum.value.trim() : '';
+    year = form.elements.musicYear ? form.elements.musicYear.value.trim() : '';
+    const moodRaw = form.elements.musicMood ? form.elements.musicMood.value.trim() : '';
+    mood = moodRaw ? moodRaw.split(',').map(x => x.trim()).filter(Boolean) : [];
+    const why = form.elements.musicWhy ? form.elements.musicWhy.value.trim() : '';
+    audio = form.elements.musicAudio ? form.elements.musicAudio.value.trim() : '';
+    link = form.elements.musicLink ? form.elements.musicLink.value.trim() : '';
+
+    if (song) {
+      title = song;
+      if (form.elements.title) form.elements.title.value = song;
+    }
+    if (why) description = why;
+    else if (!description && artist) description = `${title} by ${artist}`;
+
+    if (!blocknoteMd && why) {
+      blocknoteMd = why;
+    }
+  }
+
   return {
     existingId: form.elements.existingId ? form.elements.existingId.value : '',
     type: selectedType,
     world: selectedWorld,
-    title: form.elements.title ? form.elements.title.value.trim() : '',
+    title,
+    artist,
+    album,
+    year,
+    mood,
+    audio,
+    link,
     date: form.elements.date ? form.elements.date.value : '',
     location: form.elements.location ? form.elements.location.value.trim() : '',
-    description: form.elements.description ? form.elements.description.value.trim() : '',
+    description,
     cover: form.elements.cover ? form.elements.cover.value : '',
     tags,
     related,
     people,
     presentation,
-    story: blocknoteMd
+    story: blocknoteMd,
+    status: form.elements.status ? form.elements.status.value : 'past',
+    featured: Boolean(form.elements.featured && form.elements.featured.checked)
   };
 }
 
@@ -843,7 +921,7 @@ async function saveCurrentEntry() {
         const titleEl = document.querySelector('.artifact-title-group h1, h1.person-title');
         if (titleEl) titleEl.focus();
       }
-      throw new Error('Add a title before saving.');
+      throw new Error(payload.type === 'music' ? 'Add a song name before saving.' : 'Add a title before saving.');
     }
     
     if (typeof typingTimer !== 'undefined') clearTimeout(typingTimer);

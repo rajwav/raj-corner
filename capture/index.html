@@ -65,22 +65,76 @@
       </label>
     </div>
 
-    <label><span>Title</span> <input id="setup-title" name="title" placeholder="That evening in Puri" style="font-size: 16px;"></label>
-    <label><span>Description</span> <textarea id="setup-description" name="description" rows="2" placeholder="Optional brief summary..."></textarea></label>
+    <!-- Dedicated compact Music fields (shown when Type === 'music') -->
+    <div id="music-fields-container" style="display:none; margin-bottom:16px;">
+      <div style="background: rgba(0,0,0,0.025); border: 1px solid var(--line); border-radius: 6px; padding: 16px; margin-bottom: 16px;">
+        <div style="font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-light); margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;">
+          <span>Music Archive Entry</span>
+          <span>Interests World</span>
+        </div>
+        <label style="margin-bottom:12px; display:block;">
+          <span style="font-family:var(--mono); font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; display:block; margin-bottom:4px;">Song <span style="color:#e11d48;">*</span></span>
+          <input id="music-song" name="musicSong" placeholder="e.g. Ruposh" style="font-size:16px; width:100%;">
+        </label>
+
+        <label style="margin-bottom:12px; display:block;">
+          <span style="font-family:var(--mono); font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; display:block; margin-bottom:4px;">Artist <span style="color:#e11d48;">*</span></span>
+          <input id="music-artist" name="musicArtist" placeholder="e.g. AVOIDRPH" style="font-size:15px; width:100%;">
+        </label>
+
+        <div style="display:flex; gap:16px; margin-bottom:12px;">
+          <label style="flex:1;">
+            <span style="font-family:var(--mono); font-size:11px; text-transform:uppercase; display:block; margin-bottom:4px;">Album <small style="color:var(--text-light);">(optional)</small></span>
+            <input id="music-album" name="musicAlbum" placeholder="Single / Album" style="width:100%;">
+          </label>
+          <label style="flex:1;">
+            <span style="font-family:var(--mono); font-size:11px; text-transform:uppercase; display:block; margin-bottom:4px;">Year <small style="color:var(--text-light);">(optional)</small></span>
+            <input id="music-year" name="musicYear" type="text" placeholder="2026" style="width:100%;">
+          </label>
+        </div>
+
+        <label style="margin-bottom:12px; display:block;">
+          <span style="font-family:var(--mono); font-size:11px; text-transform:uppercase; display:block; margin-bottom:4px;">Mood / Tags <small style="color:var(--text-light);">(comma separated, optional)</small></span>
+          <input id="music-mood" name="musicMood" placeholder="night, late-drive, electronic, atmospheric" style="width:100%;">
+        </label>
+
+        <label style="margin-bottom:12px; display:block;">
+          <span style="font-family:var(--mono); font-size:11px; text-transform:uppercase; display:block; margin-bottom:4px;">Why this song <small style="color:var(--text-light);">(optional reflection)</small></span>
+          <textarea id="music-why" name="musicWhy" rows="3" placeholder="What does this sound bring back or why is it here?..." style="width:100%; font-family:var(--serif, serif);"></textarea>
+        </label>
+
+        <div style="display:flex; gap:16px;">
+          <label style="flex:1;">
+            <span style="font-family:var(--mono); font-size:11px; text-transform:uppercase; display:block; margin-bottom:4px;">Audio File URL <small style="color:var(--text-light);">(optional)</small></span>
+            <input id="music-audio" name="musicAudio" placeholder="/uploads/... or https://..." style="width:100%;">
+          </label>
+          <label style="flex:1;">
+            <span style="font-family:var(--mono); font-size:11px; text-transform:uppercase; display:block; margin-bottom:4px;">External Link <small style="color:var(--text-light);">(optional)</small></span>
+            <input id="music-link" name="musicLink" placeholder="https://..." style="width:100%;">
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div id="standard-fields-container">
+      <label id="title-field"><span>Title</span> <input id="setup-title" name="title" placeholder="That evening in Puri" style="font-size: 16px;"></label>
+      <label id="desc-field"><span>Description</span> <textarea id="setup-description" name="description" rows="2" placeholder="Optional brief summary..."></textarea></label>
+
+      <div id="location-field-row" style="display:flex; gap:16px; margin-bottom: 16px;">
+        <label id="location-field" style="flex:1;"><span>Place</span> <input name="location" placeholder="Puri" style="width:100%;"></label>
+      </div>
+    </div>
 
     <div style="display:flex; gap:16px; margin-bottom: 16px;">
       <label style="flex:1;"><span>Date</span> <input type="date" name="date" style="width:100%;"></label>
-      <label style="flex:1;"><span>Place</span> <input name="location" placeholder="Puri" style="width:100%;"></label>
-    </div>
-    
-    <div style="display:flex; gap:16px; margin-bottom: 16px;">
       <label style="flex:1;"><span>Status</span>
         <select name="status" style="width:100%; padding:8px; border:1px solid var(--line); border-radius:4px; font-family:var(--mono);">
           <option value="draft">Draft</option>
           <option value="published">Published</option>
+          <option value="past">Past</option>
         </select>
       </label>
-      <label style="flex:1; display:flex; align-items:center; gap:8px;">
+      <label style="flex:0.6; display:flex; align-items:center; gap:8px;">
         <input type="checkbox" name="featured" id="setup-featured">
         <span>Featured</span>
       </label>
@@ -95,14 +149,17 @@
       </div>
     </details>
 
-    <label class="image-upload" style="margin-bottom:24px;"><span>Cover Photograph</span> <input type="file" id="image" accept="image/*"><small id="image-status">Optional. Will be saved locally.</small></label>
+    <label class="image-upload" style="margin-bottom:24px;"><span>Cover Photograph / Artwork</span> <input type="file" id="image" accept="image/*"><small id="image-status">Optional. Will be saved locally.</small></label>
 
     <div class="actions" style="display:flex; justify-content:space-between; align-items:center;">
       <div>
         <button type="button" id="cancel" class="secondary">Cancel</button>
         <button type="button" id="delete" class="danger" hidden>Trash</button>
       </div>
-      <button type="button" id="btn-continue-editor" class="primary" style="font-size: 14px; padding: 10px 20px;">Continue to Editor →</button>
+      <div style="display:flex; gap:8px;">
+        <button type="button" id="btn-save-setup" class="primary" style="font-size: 14px; padding: 10px 18px;">Save</button>
+        <button type="button" id="btn-continue-editor" class="secondary" style="font-size: 14px; padding: 10px 16px;">Continue to Editor →</button>
+      </div>
     </div>
     <p id="message" role="status"></p>
   </form>

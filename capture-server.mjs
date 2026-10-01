@@ -62,7 +62,13 @@ function parseFrontmatter(raw) {
 function markdown(data) {
   const front = [
     `title: ${escapeYaml(data.title)}`, `type: ${data.type}`, data.world ? `world: ${data.world}` : '', data.date ? `date: ${data.date}` : '', data.location ? `location: ${escapeYaml(data.location)}` : '',
-    `tags: ${list(data.tags)}`, `description: ${escapeYaml(data.description || data.story?.split('\n')[0] || data.title)}`,
+    data.artist ? `artist: ${escapeYaml(data.artist)}` : '',
+    data.album ? `album: ${escapeYaml(data.album)}` : '',
+    data.year ? `year: ${escapeYaml(String(data.year))}` : '',
+    data.mood ? `mood: ${list(data.mood)}` : (data.type === 'music' ? 'mood: []' : ''),
+    data.audio ? `audio: ${escapeYaml(data.audio)}` : '',
+    data.link ? `link: ${escapeYaml(data.link)}` : '',
+    `tags: ${list(data.tags)}`, `description: ${escapeYaml(data.description || (data.artist ? `${data.title} by ${data.artist}` : '') || data.story?.split('\n')[0] || data.title)}`,
     `related: ${list(data.related)}`, data.people?.length ? `people: ${list(data.people)}` : '', data.cover ? `cover: ${escapeYaml(data.cover)}` : '',
     `status: ${data.status || 'past'}`, `featured: ${Boolean(data.featured)}`, `accent: ${accents[data.type] || 'sand'}`,
     data.presentation && Object.keys(data.presentation).length > 0 ? `presentation: ${JSON.stringify(data.presentation)}` : ''

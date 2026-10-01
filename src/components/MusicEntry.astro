@@ -1,0 +1,887 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import MediaTransform from './MediaTransform.astro';
+
+interface Props {
+  entry: CollectionEntry<'entries'>;
+  Content: any;
+  curatedThreads: { url: string; title: string; typeLabel: string }[];
+  all: CollectionEntry<'entries'>[];
+}
+
+const { entry, Content, curatedThreads, all } = Astro.props;
+
+// Calculate Music archive index number
+const allMusic = all
+  .filter(e => e.data.type === 'music')
+  .sort((a, b) => Number(a.data.date ?? 0) - Number(b.data.date ?? 0));
+const musicIndexNumber = allMusic.findIndex(e => e.id === entry.id) + 1 || allMusic.length || 1;
+const indexStr = `MUSIC / ${String(musicIndexNumber).padStart(3, '0')}`;
+
+const title = entry.data.title;
+const artist = entry.data.artist || '';
+const album = entry.data.album || '';
+const year = entry.data.year || (entry.data.date ? entry.data.date.getFullYear() : '');
+const dateStr = entry.data.date 
+  ? entry.data.date.toLocaleDateString('en', { month: 'long', year: 'numeric' })
+  : (year ? String(year) : 'Undated');
+
+const moods = Array.isArray(entry.data.mood) && entry.data.mood.length > 0 
+  ? entry.data.mood 
+  : (entry.data.tags || []);
+
+const audioUrl = entry.data.audio;
+const externalLink = entry.data.link;
+const coverUrl = entry.data.cover;
+
+// Check if there is a reflection / story
+const hasStory = Boolean(entry.body && entry.body.trim());
+const hasDescription = Boolean(entry.data.description && entry.data.description.trim() && entry.data.description.trim() !== `${title} by ${artist}`);
+const showReflection = hasStory || hasDescription;
+---
+
+<div class="music-experience">
+  <div class="music-ambient-glow" aria-hidden="true"></div>
+
+  <div class="music-container">
+    <!-- Back to Interests link -->
+    <nav class="music-nav" aria-label="Breadcrumb">
+      <a href="/world/interests/" class="music-back-link">
+        <span class="music-back-arrow">←</span>
+        <span>Interests / Music</span>
+      </a>
+      <span class="music-archive-id">{indexStr}</span>
+    </nav>
+
+    <!-- Main Listening Stage -->
+    <header class="music-stage">
+      <div class="music-artwork-wrapper">
+        <div class="music-record-sleeve">
+          {coverUrl ? (
+            <img 
+              src={coverUrl} 
+              alt={`Cover artwork for ${title} by ${artist}`}
+              class="music-cover-image" 
+              loading="eager"
+            />
+          ) : (
+            <div class="music-cover-fallback" aria-label={`Vinyl record fallback for ${title} by ${artist}`}>
+              <div class="vinyl-rings" aria-hidden="true">
+                <div class="ring ring-1"></div>
+                <div class="ring ring-2"></div>
+                <div class="ring ring-3"></div>
+                <div class="vinyl-center-hole"></div>
+              </div>
+              <div class="fallback-typography">
+                <span class="fallback-song">{title}</span>
+                {artist && <span class="fallback-artist">{artist}</span>}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div class="music-lead">
+        <div class="music-header-meta">
+          <span class="music-badge">Archive Selection</span>
+          {dateStr && <span class="music-date">{dateStr}</span>}
+        </div>
+
+        <h1 class="music-title">{title}</h1>
+        {artist && <p class="music-artist">{artist}</p>}
+
+        <!-- Waveform visualizer line -->
+        <div class="music-visualizer" aria-hidden="true">
+          <div class="visualizer-bar" style="--delay: 0.1s; --height: 40%"></div>
+          <div class="visualizer-bar" style="--delay: 0.4s; --height: 75%"></div>
+          <div class="visualizer-bar" style="--delay: 0.2s; --height: 90%"></div>
+          <div class="visualizer-bar" style="--delay: 0.6s; --height: 55%"></div>
+          <div class="visualizer-bar" style="--delay: 0.3s; --height: 80%"></div>
+          <div class="visualizer-bar" style="--delay: 0.5s; --height: 100%"></div>
+          <div class="visualizer-bar" style="--delay: 0.2s; --height: 65%"></div>
+          <div class="visualizer-bar" style="--delay: 0.7s; --height: 85%"></div>
+          <div class="visualizer-bar" style="--delay: 0.35s; --height: 45%"></div>
+          <div class="visualizer-bar" style="--delay: 0.15s; --height: 70%"></div>
+          <div class="visualizer-bar" style="--delay: 0.55s; --height: 95%"></div>
+          <div class="visualizer-bar" style="--delay: 0.25s; --height: 60%"></div>
+          <div class="visualizer-bar" style="--delay: 0.45s; --height: 80%"></div>
+          <div class="visualizer-bar" style="--delay: 0.65s; --height: 50%"></div>
+          <div class="visualizer-bar" style="--delay: 0.3s; --height: 90%"></div>
+          <div class="visualizer-bar" style="--delay: 0.1s; --height: 40%"></div>
+        </div>
+
+        <!-- Audio Player or External Link -->
+        {audioUrl ? (
+          <div class="music-player-panel" data-audio-src={audioUrl}>
+            <audio id="music-audio-element" src={audioUrl} preload="metadata"></audio>
+            <div class="music-player-controls">
+              <button type="button" id="music-play-btn" class="music-play-btn" aria-label="Play song">
+                <svg class="play-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                <svg class="pause-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="display:none;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+              </button>
+              <div class="music-player-track">
+                <div class="music-player-timeline" id="music-timeline" role="slider" aria-label="Playback position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                  <div class="music-player-progress" id="music-progress"></div>
+                </div>
+                <div class="music-player-times">
+                  <span id="music-cur-time">0:00</span>
+                  <span id="music-dur-time">--:--</span>
+                </div>
+              </div>
+            </div>
+            {externalLink && (
+              <a href={externalLink} target="_blank" rel="noopener noreferrer" class="music-ext-link">
+                Listen elsewhere ↗
+              </a>
+            )}
+          </div>
+        ) : externalLink ? (
+          <div class="music-listen-external">
+            <a href={externalLink} target="_blank" rel="noopener noreferrer" class="music-ext-btn">
+              <span>Listen to this song</span>
+              <span class="music-ext-arrow">↗</span>
+            </a>
+          </div>
+        ) : null}
+
+        <!-- Metadata row -->
+        <dl class="music-metadata-row">
+          <div class="music-meta-cell">
+            <dt>Date</dt>
+            <dd>{dateStr}</dd>
+          </div>
+          {album && (
+            <div class="music-meta-cell">
+              <dt>Album</dt>
+              <dd>{album}</dd>
+            </div>
+          )}
+          {moods.length > 0 && (
+            <div class="music-meta-cell">
+              <dt>Mood / Atmosphere</dt>
+              <dd class="music-mood-tags">
+                {moods.map((m: string) => (
+                  <span class="music-mood-pill">#{m}</span>
+                ))}
+              </dd>
+            </div>
+          )}
+        </dl>
+      </div>
+    </header>
+
+    <!-- Why This Song Is Here -->
+    {showReflection && (
+      <section class="music-reflection-section">
+        <h2 class="music-section-heading">Why this song is here</h2>
+        <div class="music-reflection-body">
+          {hasStory ? (
+            <div class="prose music-prose">
+              <MediaTransform><Content /></MediaTransform>
+            </div>
+          ) : (
+            <p class="music-reflection-text">{entry.data.description}</p>
+          )}
+        </div>
+      </section>
+    )}
+
+    <!-- Where This Song Lives -->
+    <section class="music-universe-section">
+      <h2 class="music-section-heading">Where this song lives</h2>
+      <div class="music-universe-grid">
+        <div class="universe-card">
+          <span class="universe-card-label">World</span>
+          <a href="/world/interests/" class="universe-card-title">Interests</a>
+          <p class="universe-card-desc">Filed within the cabinet of fascinations and listening memories.</p>
+        </div>
+
+        {year && (
+          <div class="universe-card">
+            <span class="universe-card-label">Era</span>
+            <a href={`/archive/?year=${year}`} class="universe-card-title">{year}</a>
+            <p class="universe-card-desc">Browse other moments and thoughts kept in {year}.</p>
+          </div>
+        )}
+
+        {curatedThreads.length > 0 && (
+          <div class="universe-card threads-card">
+            <span class="universe-card-label">Connected Traces</span>
+            <ul class="universe-threads-list">
+              {curatedThreads.map(t => (
+                <li>
+                  <a href={t.url}>
+                    <span class="thread-name">{t.title}</span>
+                    <span class="thread-type">{t.typeLabel}</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+  // Lightweight native audio player logic
+  const player = document.querySelector('.music-player-panel');
+  if (player) {
+    const audio = player.querySelector<HTMLAudioElement>('#music-audio-element');
+    const playBtn = player.querySelector<HTMLButtonElement>('#music-play-btn');
+    const playIcon = playBtn?.querySelector<SVGElement>('.play-icon');
+    const pauseIcon = playBtn?.querySelector<SVGElement>('.pause-icon');
+    const timeline = player.querySelector<HTMLElement>('#music-timeline');
+    const progress = player.querySelector<HTMLElement>('#music-progress');
+    const curTimeEl = player.querySelector<HTMLElement>('#music-cur-time');
+    const durTimeEl = player.querySelector<HTMLElement>('#music-dur-time');
+
+    function fmtTime(sec: number) {
+      if (isNaN(sec) || sec < 0) return '0:00';
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      return `${m}:${s < 10 ? '0' : ''}${s}`;
+    }
+
+    if (audio && playBtn) {
+      playBtn.addEventListener('click', () => {
+        if (audio.paused) {
+          audio.play().catch(e => console.warn('Play prevented:', e));
+        } else {
+          audio.pause();
+        }
+      });
+
+      audio.addEventListener('play', () => {
+        if (playIcon) playIcon.style.display = 'none';
+        if (pauseIcon) pauseIcon.style.display = 'block';
+        document.querySelector('.music-visualizer')?.classList.add('is-playing');
+      });
+
+      audio.addEventListener('pause', () => {
+        if (playIcon) playIcon.style.display = 'block';
+        if (pauseIcon) pauseIcon.style.display = 'none';
+        document.querySelector('.music-visualizer')?.classList.remove('is-playing');
+      });
+
+      audio.addEventListener('timeupdate', () => {
+        if (!audio.duration) return;
+        const pct = (audio.currentTime / audio.duration) * 100;
+        if (progress) progress.style.width = `${pct}%`;
+        if (timeline) timeline.setAttribute('aria-valuenow', String(Math.round(pct)));
+        if (curTimeEl) curTimeEl.textContent = fmtTime(audio.currentTime);
+      });
+
+      audio.addEventListener('loadedmetadata', () => {
+        if (durTimeEl) durTimeEl.textContent = fmtTime(audio.duration);
+      });
+
+      audio.addEventListener('ended', () => {
+        if (playIcon) playIcon.style.display = 'block';
+        if (pauseIcon) pauseIcon.style.display = 'none';
+        if (progress) progress.style.width = '0%';
+        document.querySelector('.music-visualizer')?.classList.remove('is-playing');
+      });
+
+      if (timeline) {
+        timeline.addEventListener('click', (e) => {
+          if (!audio.duration) return;
+          const rect = timeline.getBoundingClientRect();
+          const clickX = e.clientX - rect.left;
+          const pct = Math.max(0, Math.min(1, clickX / rect.width));
+          audio.currentTime = pct * audio.duration;
+        });
+      }
+    }
+  }
+</script>
+
+<style>
+  /* ─── Listening Room Theme & Animations ───────────────────────────────── */
+  .music-experience {
+    background-color: #0b0c0e;
+    color: #dedbd2;
+    min-height: 100vh;
+    padding: 3rem 1.5rem 6rem;
+    position: relative;
+    overflow: hidden;
+    font-family: var(--sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+    animation: musicFadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes musicFadeIn {
+    from { opacity: 0; background-color: #000; }
+    to { opacity: 1; background-color: #0b0c0e; }
+  }
+
+  .music-ambient-glow {
+    position: absolute;
+    top: -20%;
+    left: 20%;
+    width: 60vw;
+    height: 60vw;
+    max-width: 800px;
+    max-height: 800px;
+    background: radial-gradient(circle, rgba(163, 177, 138, 0.04) 0%, rgba(0, 0, 0, 0) 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .music-container {
+    max-width: 860px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ─── Top Identifier & Navigation ─────────────────────────────────────── */
+  .music-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 3.5rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    font-family: var(--mono, "SF Mono", Menlo, monospace);
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .music-back-link {
+    color: #8c8b85;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: color 0.2s ease;
+  }
+
+  .music-back-link:hover {
+    color: #e5e3dc;
+  }
+
+  .music-back-arrow {
+    transition: transform 0.2s ease;
+  }
+
+  .music-back-link:hover .music-back-arrow {
+    transform: translateX(-3px);
+  }
+
+  .music-archive-id {
+    color: #6a6964;
+    letter-spacing: 0.12em;
+  }
+
+  /* ─── Main Listening Stage ────────────────────────────────────────────── */
+  .music-stage {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 3.5rem;
+    align-items: start;
+    margin-bottom: 5rem;
+  }
+
+  @media (max-width: 720px) {
+    .music-stage {
+      grid-template-columns: 1fr;
+      gap: 2.5rem;
+    }
+  }
+
+  /* ─── Record Artwork ──────────────────────────────────────────────────── */
+  .music-artwork-wrapper {
+    width: 100%;
+    max-width: 280px;
+    margin: 0 auto;
+    animation: artworkScaleIn 1s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both;
+  }
+
+  @keyframes artworkScaleIn {
+    from {
+      opacity: 0;
+      transform: scale(0.94) translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  .music-record-sleeve {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #141518;
+    box-shadow: 
+      0 24px 50px -12px rgba(0, 0, 0, 0.75),
+      0 0 0 1px rgba(255, 255, 255, 0.08);
+    transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.5s ease;
+  }
+
+  .music-record-sleeve:hover {
+    transform: translateY(-4px) rotate(0.4deg);
+    box-shadow: 
+      0 32px 64px -16px rgba(0, 0, 0, 0.85),
+      0 0 30px -5px rgba(255, 255, 255, 0.06),
+      0 0 0 1px rgba(255, 255, 255, 0.12);
+  }
+
+  .music-cover-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  /* Typographic vinyl fallback */
+  .music-cover-fallback {
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at center, #1f2024 0%, #111215 100%);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 1.5rem;
+    text-align: center;
+  }
+
+  .vinyl-rings {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 0.25;
+    pointer-events: none;
+  }
+
+  .ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+  }
+
+  .ring-1 { width: 90%; height: 90%; }
+  .ring-2 { width: 70%; height: 70%; }
+  .ring-3 { width: 50%; height: 50%; }
+
+  .vinyl-center-hole {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #0b0c0e;
+    border: 3px solid rgba(255, 255, 255, 0.2);
+    position: absolute;
+  }
+
+  .fallback-typography {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .fallback-song {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 1.35rem;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    color: #edebe6;
+  }
+
+  .fallback-artist {
+    font-family: var(--mono, monospace);
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #9c9a93;
+  }
+
+  /* ─── Song Details & Typography ───────────────────────────────────────── */
+  .music-lead {
+    animation: musicRise 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.25s both;
+  }
+
+  @keyframes musicRise {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .music-header-meta {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+    font-family: var(--mono, monospace);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #7a7974;
+  }
+
+  .music-badge {
+    padding: 0.15rem 0.5rem;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .music-title {
+    font-family: var(--serif, "Newsreader", "Playfair Display", Georgia, serif);
+    font-size: clamp(2.2rem, 5vw, 3.2rem);
+    font-weight: 400;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    color: #f3f1ec;
+    margin: 0 0 0.5rem;
+  }
+
+  .music-artist {
+    font-family: var(--sans, sans-serif);
+    font-size: 1.15rem;
+    font-weight: 300;
+    letter-spacing: 0.04em;
+    color: #b0ada5;
+    margin: 0 0 1.75rem;
+  }
+
+  /* ─── Waveform Visualizer ─────────────────────────────────────────────── */
+  .music-visualizer {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 22px;
+    margin-bottom: 2rem;
+    opacity: 0.45;
+  }
+
+  .music-visualizer.is-playing {
+    opacity: 0.85;
+  }
+
+  .visualizer-bar {
+    width: 3px;
+    height: var(--height, 50%);
+    background: #d4d1c9;
+    border-radius: 1px;
+    animation: pulseBar 1.8s ease-in-out infinite alternate;
+    animation-delay: var(--delay, 0s);
+  }
+
+  @keyframes pulseBar {
+    0% { height: 20%; opacity: 0.3; }
+    50% { height: var(--height, 70%); opacity: 0.7; }
+    100% { height: 35%; opacity: 0.4; }
+  }
+
+  /* ─── Minimalist Audio Player ─────────────────────────────────────────── */
+  .music-player-panel {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 2rem;
+  }
+
+  .music-player-controls {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+  }
+
+  .music-play-btn {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: #ece9e2;
+    color: #0b0c0e;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: transform 0.15s ease, background-color 0.15s ease;
+  }
+
+  .music-play-btn:hover {
+    transform: scale(1.06);
+    background: #ffffff;
+  }
+
+  .music-play-btn:active {
+    transform: scale(0.96);
+  }
+
+  .music-player-track {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .music-player-timeline {
+    width: 100%;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .music-player-progress {
+    height: 100%;
+    width: 0%;
+    background: #dedbd2;
+    border-radius: 2px;
+    transition: width 0.1s linear;
+  }
+
+  .music-player-times {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono, monospace);
+    font-size: 0.7rem;
+    color: #7e7d78;
+  }
+
+  .music-ext-link {
+    display: inline-block;
+    margin-top: 0.75rem;
+    font-family: var(--mono, monospace);
+    font-size: 0.7rem;
+    color: #9e9d97;
+    text-decoration: none;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .music-ext-link:hover {
+    color: #f0eee9;
+    text-decoration: underline;
+  }
+
+  .music-listen-external {
+    margin-bottom: 2rem;
+  }
+
+  .music-ext-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.65rem 1.25rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    color: #e5e3dc;
+    text-decoration: none;
+    font-family: var(--sans, sans-serif);
+    font-size: 0.85rem;
+    letter-spacing: 0.02em;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  }
+
+  .music-ext-btn:hover {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.25);
+    color: #ffffff;
+  }
+
+  /* ─── Metadata Row ────────────────────────────────────────────────────── */
+  .music-metadata-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 1.25rem;
+    margin: 0;
+    padding: 1.25rem 0 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .music-meta-cell dt {
+    font-family: var(--mono, monospace);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #72716c;
+    margin-bottom: 0.3rem;
+  }
+
+  .music-meta-cell dd {
+    font-family: var(--sans, sans-serif);
+    font-size: 0.9rem;
+    color: #d1cfc7;
+    margin: 0;
+  }
+
+  .music-mood-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .music-mood-pill {
+    font-family: var(--mono, monospace);
+    font-size: 0.72rem;
+    color: #a8a69e;
+  }
+
+  /* ─── Editorial Reflection ────────────────────────────────────────────── */
+  .music-reflection-section {
+    margin-top: 3.5rem;
+    padding-top: 3rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .music-section-heading {
+    font-family: var(--mono, monospace);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #73726d;
+    margin: 0 0 1.75rem;
+  }
+
+  .music-reflection-body {
+    max-width: 680px;
+  }
+
+  .music-reflection-text {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 1.25rem;
+    line-height: 1.65;
+    color: #e2dfd7;
+    font-style: italic;
+    margin: 0;
+  }
+
+  .music-prose {
+    color: #d8d5cc;
+    font-family: var(--serif, Georgia, serif);
+    font-size: 1.15rem;
+    line-height: 1.75;
+  }
+
+  .music-prose p {
+    margin-bottom: 1.4rem;
+  }
+
+  /* ─── Where This Song Lives ───────────────────────────────────────────── */
+  .music-universe-section {
+    margin-top: 4.5rem;
+    padding-top: 3rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .music-universe-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .universe-card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .universe-card-label {
+    font-family: var(--mono, monospace);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #6a6964;
+    margin-bottom: 0.5rem;
+  }
+
+  .universe-card-title {
+    font-family: var(--sans, sans-serif);
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: #edebe6;
+    text-decoration: none;
+    margin-bottom: 0.4rem;
+    transition: color 0.15s ease;
+  }
+
+  .universe-card-title:hover {
+    color: #ffffff;
+    text-decoration: underline;
+  }
+
+  .universe-card-desc {
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: #8c8a84;
+    margin: 0;
+  }
+
+  .threads-card {
+    grid-column: 1 / -1;
+  }
+
+  .universe-threads-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .universe-threads-list a {
+    display: flex;
+    flex-direction: column;
+    padding: 0.75rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+    text-decoration: none;
+    transition: background 0.2s ease;
+  }
+
+  .universe-threads-list a:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .thread-name {
+    font-family: var(--sans, sans-serif);
+    font-size: 0.88rem;
+    color: #e5e3dc;
+    margin-bottom: 0.2rem;
+  }
+
+  .thread-type {
+    font-family: var(--mono, monospace);
+    font-size: 0.65rem;
+    color: #7b7a75;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* ─── Accessibility & Motion Preferences ──────────────────────────────── */
+  @media (prefers-reduced-motion: reduce) {
+    .music-experience,
+    .music-artwork-wrapper,
+    .music-lead,
+    .visualizer-bar,
+    .music-record-sleeve {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+</style>

@@ -6,7 +6,22 @@ const entrySchema = z.object({
   title: z.string(),
   type: z.enum(['memory', 'travel', 'trip', 'photo', 'place', 'car', 'music', 'book', 'movie', 'anime', 'space', 'chess', 'experiment', 'project', 'idea', 'thought', 'person', 'milestone', 'dream', 'goal', 'collection', 'note']),
   world: z.enum(['life', 'travel', 'interests', 'making', 'archive']).optional(),
-  date: z.coerce.date().optional(), location: z.string().optional(), tags: z.array(z.string()).default([]), description: z.string(), related: z.array(z.string()).default([]), people: z.array(z.string()).default([]), cover: z.string().optional(), featured: z.boolean().default(false), status: z.enum(['past', 'now', 'future']).default('past'), accent: z.enum(['coral', 'sky', 'lime', 'night', 'sand']).default('sand'),
+  date: z.coerce.date().optional(),
+  location: z.string().optional(),
+  artist: z.string().optional(),
+  album: z.string().optional(),
+  year: z.union([z.string(), z.number()]).optional(),
+  mood: z.array(z.string()).default([]),
+  audio: z.string().optional(),
+  link: z.string().optional(),
+  tags: z.array(z.string()).default([]),
+  description: z.string().default(''),
+  related: z.array(z.string()).default([]),
+  people: z.array(z.string()).default([]),
+  cover: z.string().optional(),
+  featured: z.boolean().default(false),
+  status: z.enum(['past', 'now', 'future']).default('past'),
+  accent: z.enum(['coral', 'sky', 'lime', 'night', 'sand']).default('sand'),
   presentation: z.object({
     layout: z.object({
       mode: z.enum(['default', 'editorial', 'centered', 'split', 'immersive']).optional()

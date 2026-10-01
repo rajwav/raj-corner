@@ -27,6 +27,10 @@ const mkCurrent = found.filter(e => ['now', 'building', 'learning'].includes((e.
 const mkExperiments = found.filter(e => e.data.type === 'experiment' && !mkCurrent.includes(e));
 const mkIdeas = found.filter(e => (e.data.type === 'idea' || e.data.type === 'note' || e.data.type === 'thought' || e.data.type === 'goal') && !mkCurrent.includes(e));
 const mkOther = found.filter(e => !mkCurrent.includes(e) && !mkExperiments.includes(e) && !mkIdeas.includes(e));
+
+// Groups for Interests
+const musicEntries = found.filter(e => e.data.type === 'music').sort((a, b) => Number(b.data.date ?? 0) - Number(a.data.date ?? 0));
+const otherInterests = found.filter(e => e.data.type !== 'music');
 ---
 <Base title={`${definition[1]} · Raj's Corner`}>
   {world === 'travel' ? (
@@ -179,44 +183,77 @@ const mkOther = found.filter(e => !mkCurrent.includes(e) && !mkExperiments.inclu
         <p class="interests-count">{found.length} {found.length === 1 ? 'thread' : 'threads'} to follow.</p>
       </header>
 
-      <section class="interests-gallery">
-        {found.map(entry => {
-          const t = entry.data.type;
-          let typeClass = 'int-default';
-          if (t === 'music') typeClass = 'int-music';
-          else if (t === 'car') typeClass = 'int-car';
-          else if (t === 'space') typeClass = 'int-space';
-          else if (t === 'chess') typeClass = 'int-chess';
-          else if (t === 'book' || t === 'movie' || t === 'anime') typeClass = 'int-culture';
-          
-          return (
-            <a href={`/entry/${entry.id}/`} class={`interest-item ${typeClass}`}>
-              {entry.data.cover && typeClass !== 'int-music' && (
-                <figure class="interest-cover">
-                  <img src={entry.data.cover} alt={entry.data.title} loading="lazy" />
-                </figure>
-              )}
-              
-              <div class="interest-content">
-                <div class="interest-meta">
-                  <span class="i-type">{entry.data.type}</span>
-                  {entry.data.date && <span class="i-date">{niceDate(entry.data.date)}</span>}
-                </div>
-                <h2 class="interest-title">{entry.data.title}</h2>
-                {entry.data.description && <p class="interest-desc">{entry.data.description}</p>}
-                
-                {typeClass === 'int-music' && entry.data.cover && (
-                  <div class="record-sleeve">
-                    <img src={entry.data.cover} alt={entry.data.title} loading="lazy" />
+      {musicEntries.length > 0 && (
+        <section class="interests-music-section">
+          <div class="music-section-header">
+            <span class="music-section-label">Listening Collection</span>
+            <h2 class="music-section-title">Music</h2>
+            <p class="music-section-lede">Records and tracks attached to places, evenings, and memory.</p>
+          </div>
+
+          <div class="music-records-shelf">
+            {musicEntries.map((entry, index) => {
+              const numStr = String(index + 1).padStart(2, '0');
+              const artistName = entry.data.artist || '';
+              return (
+                <a href={`/entry/${entry.id}/`} class="record-row-item">
+                  <span class="record-index">{numStr}</span>
+                  <div class="record-thumb-frame">
+                    {entry.data.cover ? (
+                      <img src={entry.data.cover} alt={entry.data.title} class="record-thumb-img" loading="lazy" />
+                    ) : (
+                      <div class="record-thumb-vinyl" aria-hidden="true">
+                        <div class="record-vinyl-groove"></div>
+                      </div>
+                    )}
                   </div>
+                  <div class="record-main-info">
+                    <span class="record-title">{entry.data.title}</span>
+                    {artistName && <span class="record-artist">{artistName}</span>}
+                  </div>
+                  {entry.data.date && (
+                    <span class="record-date">{niceDate(entry.data.date)}</span>
+                  )}
+                  <span class="record-arrow">Listen →</span>
+                </a>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {otherInterests.length > 0 && (
+        <section class="interests-gallery">
+          {otherInterests.map(entry => {
+            const t = entry.data.type;
+            let typeClass = 'int-default';
+            if (t === 'car') typeClass = 'int-car';
+            else if (t === 'space') typeClass = 'int-space';
+            else if (t === 'chess') typeClass = 'int-chess';
+            else if (t === 'book' || t === 'movie' || t === 'anime') typeClass = 'int-culture';
+            
+            return (
+              <a href={`/entry/${entry.id}/`} class={`interest-item ${typeClass}`}>
+                {entry.data.cover && (
+                  <figure class="interest-cover">
+                    <img src={entry.data.cover} alt={entry.data.title} loading="lazy" />
+                  </figure>
                 )}
                 
-                <span class="interest-arrow">Follow thread →</span>
-              </div>
-            </a>
-          );
-        })}
-      </section>
+                <div class="interest-content">
+                  <div class="interest-meta">
+                    <span class="i-type">{entry.data.type}</span>
+                    {entry.data.date && <span class="i-date">{niceDate(entry.data.date)}</span>}
+                  </div>
+                  <h2 class="interest-title">{entry.data.title}</h2>
+                  {entry.data.description && <p class="interest-desc">{entry.data.description}</p>}
+                  <span class="interest-arrow">Follow thread →</span>
+                </div>
+              </a>
+            );
+          })}
+        </section>
+      )}
 
       <footer class="interests-footer">
         <p class="interests-footer-label">Curiosity rarely stays in one room.</p>

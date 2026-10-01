@@ -27,10 +27,21 @@ const places = new Set(all.map(x=>x.data.location).filter(Boolean));
 
 function linkify(text: any) {
   const str = String(text);
-  // Match entry titles
+  // Match exact entry titles
   const matchingEntry = all.find(e => e.data.title.toLowerCase() === str.toLowerCase());
   if (matchingEntry) return `<a href="/entry/${matchingEntry.id}/" class="currently-link">${str}</a>`;
   
+  // Match music entries specifically within text (e.g. "Ruposh by AVOIDRPH")
+  const musicEntries = all.filter(e => e.data.type === 'music');
+  for (const m of musicEntries) {
+    if (!m.data.title) continue;
+    const escaped = m.data.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(^|\\b)(${escaped})(\\b|$)`, 'i');
+    if (regex.test(str)) {
+      return str.replace(regex, `$1<a href="/entry/${m.id}/" class="currently-link">$2</a>$3`);
+    }
+  }
+
   // Match places
   const matchingPlace = [...places].find(p => String(p).toLowerCase() === str.toLowerCase());
   if (matchingPlace) return `<a href="/places/${placeSlug(String(matchingPlace))}/" class="currently-link">${str}</a>`;
