@@ -1,6 +1,7 @@
 ---
 title: "The Cycling Accident"
 type: memory
+world: life
 date: 2026-09-08
 location: "Kirwa chawk"
 tags: ["accident"]
@@ -116,7 +117,7 @@ An ordinary Tuesday afternoon became a day I never expected to remember this cle
 # WHAT I LEARNED
 
 * **Life can change before you even realise it.** I was just returning from class, slowly cycling and looking for a song, and within a few seconds I was on the road, surrounded by people and being taken to a hospital. It made me realise that an ordinary moment should never be treated as something guaranteed.
-* **The people who show up matter more than the people who judge.** I may remember the accident, but I will remember the strangers who helped me, the friends who protected my things, Abhisekh and Nihar staying with me, Jerry helping me in my room, and my parents worrying about me. **A difficult moment reveals who is actually there.** At the same time, it also made me rethink some relationships. There were people I had considered very close to me, people I genuinely believed cared deeply about me, including SK and Banamudra, whose response to what happened felt much less involved than I had expected. I don't want to judge them or turn this memory into resentment, but it did teach me something about relationships: **sometimes the people we think are closest to us aren't necessarily the people who show up when we need them, and sometimes care comes from places we never expected.**
+* **The people who show up matter more than the people who judge.** I may remember the accident, but I will remember the strangers who helped me, the friends who protected my things, Abhisekh and Nihar staying with me, Jerry helping me in my room, and my parents worrying about me. **A difficult moment reveals who is actually there.** At the same time, it also made me rethink some relationships. There were people I had considered very close to me, people I genuinely believed cared deeply about me, including those special persons whom i expected to  care , and their response to what happened felt much less involved than I had expected. I don't want to judge them or turn this memory into resentment, but it did teach me something about relationships: **sometimes the people we think are closest to us aren't necessarily the people who show up when we need them, and sometimes care comes from places we never expected.**
 * **Sometimes love looks like fear and strictness.** My parents had trusted me again, helped me prepare the new cycle and even ordered things for it. When they became strict after this accident, I understood that behind their words was not anger—it was the fear of losing or seeing their son hurt.
 * **I was luckier than I realised.** My head came dangerously close to a rock, yet I escaped a potentially much worse injury. Sometimes you only understand how close something came to being much worse after the moment has passed.
 * **I don't want to remember this day only as the day I got hurt.** I want to remember it as the day I discovered how quickly life can change, how fragile an ordinary moment can be, and how many people can stand beside you when everything suddenly goes wrong.
