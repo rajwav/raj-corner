@@ -2643,6 +2643,41 @@ if (btnSaveCanvas) {
   };
 }
 
+async function publishLive(btn) {
+  if (typeof saveCurrentEntry === 'function' && window.isDirty) {
+    await saveCurrentEntry();
+  }
+  const originalText = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = 'Publishing... ⏳';
+  }
+  try {
+    const res = await fetch('/api/publish', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      throw new Error(data.error || 'Publish failed');
+    }
+    if (btn) btn.innerHTML = '✓ Published!';
+    alert(data.message || 'Published to GitHub! Vercel is updating your live website now.');
+  } catch (err) {
+    console.error('Publish error:', err);
+    alert('Could not publish: ' + (err.message || 'Unknown error'));
+  } finally {
+    setTimeout(() => {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    }, 3500);
+  }
+}
+
+const btnPublishCanvas = document.getElementById('btn-publish-canvas');
+const btnHeaderPublish = document.getElementById('btn-header-publish');
+btnPublishCanvas?.addEventListener('click', () => publishLive(btnPublishCanvas));
+btnHeaderPublish?.addEventListener('click', () => publishLive(btnHeaderPublish));
+
 if (newBtnUndo) {
   newBtnUndo.onmousedown = (e) => e.preventDefault();
   newBtnUndo.onclick = window.undo;

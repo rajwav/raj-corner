@@ -192,6 +192,24 @@ const server=http.createServer(async (req,res)=>{
     if (req.method==='GET' && url.pathname.startsWith('/api/entry/')) { const id=decodeURIComponent(url.pathname.slice(11)); const found=(await readEntries(true)).find(entry=>entry.id===id); return found?json(res,200,found):json(res,404,{error:'Entry not found'}); }
     if (req.method==='POST' && url.pathname==='/api/entry') { const data=await body(req); if (!types.includes(data.type)||!data.title?.trim()) return json(res,400,{error:'Choose a type and give it a title.'}); const id=data.existingId || slugify(data.title); const file=await uniqueFile(id,data.existingId); await fs.mkdir(path.dirname(file),{recursive:true}); await fs.writeFile(file,markdown(data)); return json(res,200,{ok:true,id:path.relative(entriesDir,file).replace(/\.md$/,'').split(path.sep).join('/')}); }
     if (req.method==='DELETE' && url.pathname.startsWith('/api/entry/')) { const data=await body(req); if (data.confirm!==true) return json(res,400,{error:'Deletion must be confirmed.'}); const id=decodeURIComponent(url.pathname.slice(11)); const file=path.resolve(entriesDir,`${id}.md`); if (!file.startsWith(entriesDir+path.sep)) return json(res,400,{error:'Invalid entry'}); await fs.mkdir(trashDir,{recursive:true}); await fs.rename(file,path.join(trashDir,`${Date.now()}-${safeName(id)}.md`)); return json(res,200,{ok:true}); }
+    if (req.method==='POST' && url.pathname==='/api/publish') {
+      try {
+        const { exec } = await import('node:child_process');
+        const { promisify } = await import('node:util');
+        const execAsync = promisify(exec);
+        await execAsync('git add .', { cwd: root });
+        const { stdout: status } = await execAsync('git status --porcelain', { cwd: root });
+        if (!status.trim()) {
+          return json(res, 200, { ok: true, message: 'All changes are already published to GitHub!' });
+        }
+        await execAsync('git commit -m "Update content via Capture"', { cwd: root });
+        await execAsync('git push origin main', { cwd: root });
+        return json(res, 200, { ok: true, message: 'Published! Pushed to GitHub and Vercel is updating now.' });
+      } catch (err) {
+        console.error('Publish error:', err);
+        return json(res, 500, { error: err.message || 'Failed to publish to GitHub' });
+      }
+    }
     if (req.method==='POST' && url.pathname==='/api/image') {
       const data = await body(req);
       const upload = decodeUpload({ ...data, type: data.type || String(data.dataUrl || '').match(/^data:([^;]+)/)?.[1] });

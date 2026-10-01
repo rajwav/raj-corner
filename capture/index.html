@@ -20,7 +20,7 @@
     box-shadow: 0 0 0 4px rgba(128, 128, 128, 0.08);
   }
 </style>
-</head><body><header><a href="#/entries" class="mark">RAJ <i>✦</i> CAPTURE</a><span>Local only · files stay yours</span></header><main><section id="home" class="intro"><p class="label">Your personal notebook</p><h1>What happened?</h1><p>Turn a moment into a page before it disappears. No frontmatter. No code.</p><button class="primary" data-go="capture">Capture something <b>↓</b></button></section><nav class="tabs"><button data-go="capture">Capture</button><button data-go="entries">Entries</button><button data-go="currently">Currently</button>
+</head><body><header style="display:flex; justify-content:space-between; align-items:center;"><div><a href="#/entries" class="mark">RAJ <i>✦</i> CAPTURE</a><span>Local only · files stay yours</span></div><button type="button" id="btn-header-publish" class="primary" style="background:#059669; color:#fff; border:none; font-size:11px; padding:6px 12px; border-radius:4px; font-family:var(--mono); cursor:pointer;" title="Push changes to GitHub & deploy live on Vercel">🚀 Publish to Web</button></header><main><section id="home" class="intro"><p class="label">Your personal notebook</p><h1>What happened?</h1><p>Turn a moment into a page before it disappears. No frontmatter. No code.</p><button class="primary" data-go="capture">Capture something <b>↓</b></button></section><nav class="tabs"><button data-go="capture">Capture</button><button data-go="entries">Entries</button><button data-go="currently">Currently</button>
       <button data-go="rhythm">Rhythm</button><button data-go="life-list">Life list</button></nav>
 <div id="capture-workspace" style="display:flex; flex-direction:column; gap:0; align-items:stretch;">
 <section id="capture" class="panel" style="max-width: 600px; margin: 40px auto; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); display: none;">
@@ -121,6 +121,7 @@
       <button type="button" id="btn-undo" class="secondary" disabled title="Undo (Cmd/Ctrl + Z)">↩</button>
       <button type="button" id="btn-redo" class="secondary" disabled title="Redo (Cmd/Ctrl + Y)">↪</button>
       <button type="button" id="btn-save-canvas" class="primary">Save</button>
+      <button type="button" id="btn-publish-canvas" class="primary" style="background:#059669; color:#fff; border:none; display:inline-flex; align-items:center; gap:4px;" title="Save changes and deploy live on Vercel">🚀 Publish to Web</button>
     </div>
   </div>
   
