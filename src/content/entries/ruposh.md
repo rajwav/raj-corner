@@ -17,3 +17,5 @@ accent: lime
 ---
 
 A slow-burning, atmospheric electronic soundscape. It feels like headlamps sweeping over quiet trees and empty stretches of highway late at night when the rest of the world has gone silent.
+
+<audio src="/uploads/1790861680921-ruposh-original-score.mp3" controls></audio>
