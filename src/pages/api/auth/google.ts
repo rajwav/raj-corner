@@ -1,4 +1,5 @@
 import type { APIRoute } from 'astro';
+import { getOAuthRedirectUri } from '../../../lib/access-control/auth';
 
 export const prerender = false;
 
@@ -33,8 +34,7 @@ export const GET: APIRoute = async ({ request, redirect, url }) => {
   });
   const state = Buffer.from(stateData).toString('base64url');
 
-  const origin = import.meta.env.PUBLIC_SITE_URL || url.origin;
-  const callbackUrl = `${origin}/api/auth/callback/google`;
+  const callbackUrl = getOAuthRedirectUri(url);
 
   const googleUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
   googleUrl.searchParams.set('client_id', clientId);

@@ -12,6 +12,97 @@ function getServerEnv(name: string): string | undefined {
   return typeof value === 'string' ? value : process.env[name];
 }
 
+export const CANONICAL_SITE_URL = 'https://raj-corner.vercel.app';
+export const LOCAL_DEV_ORIGIN = 'http://localhost:4321';
+
+/**
+ * Checks whether a hostname is a temporary/preview Vercel deployment URL.
+ * e.g., raj-corner-8km5ueenj-rajwavs-projects.vercel.app
+ */
+export function isTemporaryVercelHostname(hostname: string): boolean {
+  const clean = hostname.toLowerCase().trim();
+  return clean.endsWith('.vercel.app') && clean !== 'raj-corner.vercel.app';
+}
+
+/**
+ * Checks whether a hostname represents a local development environment.
+ */
+export function isLocalhost(hostname: string): boolean {
+  const clean = hostname.toLowerCase().trim();
+  return clean === 'localhost' || clean === '127.0.0.1' || clean === '0.0.0.0';
+}
+
+/**
+ * Resolves the site origin for OAuth callbacks and external links.
+ * 
+ * Precedence / Rules:
+ * 1. If an incoming requestUrl is explicitly from localhost (e.g. http://localhost:4321),
+ *    preserve that localhost origin for local development.
+ * 2. If an explicit environment override (PUBLIC_SITE_URL or SITE_URL) is configured:
+ *    - If the env URL is a temporary *.vercel.app hostname, reject it and use CANONICAL_SITE_URL.
+ *    - If requestUrl is remote and env is localhost, ignore local env override and use CANONICAL_SITE_URL.
+ *    - Otherwise, use the configured environment origin.
+ * 3. If request came from a temporary *.vercel.app deployment URL, strictly canonicalize to CANONICAL_SITE_URL.
+ * 4. In production (PROD=true or NODE_ENV=production) or for any remote request, do NOT derive from arbitrary Host headers;
+ *    strictly use CANONICAL_SITE_URL.
+ * 5. Default fallback: LOCAL_DEV_ORIGIN
+ */
+export function getSiteOrigin(requestUrl?: URL | string): string {
+  let parsedUrl: URL | null = null;
+  if (requestUrl) {
+    try {
+      parsedUrl = typeof requestUrl === 'string' ? new URL(requestUrl, 'http://localhost:4321') : requestUrl;
+    } catch {
+      parsedUrl = null;
+    }
+  }
+
+  // 1. If incoming request is explicitly from localhost, preserve localhost origin for dev
+  if (parsedUrl && isLocalhost(parsedUrl.hostname)) {
+    return parsedUrl.origin;
+  }
+
+  // 2. Check explicit env override (PUBLIC_SITE_URL or SITE_URL)
+  const envUrl = getServerEnv('PUBLIC_SITE_URL') || getServerEnv('SITE_URL');
+  if (envUrl) {
+    const cleanEnv = envUrl.trim().replace(/\/+$/, '');
+    try {
+      const parsedEnv = new URL(cleanEnv);
+      if (isTemporaryVercelHostname(parsedEnv.hostname)) {
+        return CANONICAL_SITE_URL;
+      }
+      // If evaluating a remote request and env is configured for localhost, ignore local env override
+      if (parsedUrl && !isLocalhost(parsedUrl.hostname) && isLocalhost(parsedEnv.hostname)) {
+        return CANONICAL_SITE_URL;
+      }
+      return cleanEnv;
+    } catch {
+      // Ignore invalid URL in env
+    }
+  }
+
+  // 3. If request came with a temporary vercel domain, strictly canonicalize
+  if (parsedUrl && isTemporaryVercelHostname(parsedUrl.hostname)) {
+    return CANONICAL_SITE_URL;
+  }
+
+  // 4. In production or for any remote request, never trust arbitrary host header
+  const isProd = getServerEnv('PROD') === 'true' || getServerEnv('NODE_ENV') === 'production';
+  if (isProd || (parsedUrl && !isLocalhost(parsedUrl.hostname))) {
+    return CANONICAL_SITE_URL;
+  }
+
+  return LOCAL_DEV_ORIGIN;
+}
+
+/**
+ * Returns the exact Google OAuth callback URL.
+ */
+export function getOAuthRedirectUri(requestUrl?: URL | string): string {
+  const origin = getSiteOrigin(requestUrl);
+  return `${origin}/api/auth/callback/google`;
+}
+
 /**
  * Production Secret Guardrail Accessors
  * In production (NODE_ENV=production), missing secrets MUST fail safely:

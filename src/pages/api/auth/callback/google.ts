@@ -3,7 +3,8 @@ import {
   createVisitorSession, 
   createOwnerSession, 
   buildSessionCookieString, 
-  getOwnerEmail 
+  getOwnerEmail,
+  getOAuthRedirectUri
 } from '../../../../lib/access-control/auth';
 
 export const prerender = false;
@@ -81,8 +82,7 @@ export const GET: APIRoute = async ({ request, redirect, url }) => {
     });
   }
 
-  const origin = import.meta.env.PUBLIC_SITE_URL || url.origin;
-  const callbackUrl = `${origin}/api/auth/callback/google`;
+  const callbackUrl = getOAuthRedirectUri(url);
 
   // 4. Exchange authorization code for tokens with Google
   const tokenRes = await fetch('https://oauth2.googleapis.com/token', {

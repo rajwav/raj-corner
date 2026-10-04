@@ -17,7 +17,12 @@ import {
   getOwnerEmail,
   verifyOwnerPassword,
   createVisitorSession,
-  createOwnerSession
+  createOwnerSession,
+  CANONICAL_SITE_URL,
+  LOCAL_DEV_ORIGIN,
+  getSiteOrigin,
+  getOAuthRedirectUri,
+  isTemporaryVercelHostname
 } from '../src/lib/access-control/auth.ts';
 import { getStorage } from '../src/lib/access-control/storage.ts';
 import { evaluateMediaAccess, extractMediaUrlsFromEntry } from '../src/lib/access-control/media.ts';
@@ -917,8 +922,76 @@ async function runTests() {
   assert.strictEqual(timelineEval.allowed, false);
   console.log('   ✓ Existing security perimeter, absolute-private, and other worlds remain intact.\n');
 
-  console.log('🎉 ALL 46 SECURITY, PERIMETER & INTERESTS TESTS PASSED PERFECTLY!\n');
-  console.log('   (21 original security tests + 10 public-world-visibility tests + 5 guardrail tests + 4 people architecture tests + 6 interests world public tests)\n');
+  // Test 47: Localhost request produces localhost redirect URI (preserves dev OAuth)
+  console.log('47. Localhost request produces localhost redirect URI...');
+  const localhostUriString = getOAuthRedirectUri('http://localhost:4321/api/auth/google');
+  assert.strictEqual(localhostUriString, 'http://localhost:4321/api/auth/callback/google');
+  const localhostUriObj = getOAuthRedirectUri(new URL('http://localhost:4321/api/auth/google?redirect=/entry/test'));
+  assert.strictEqual(localhostUriObj, 'http://localhost:4321/api/auth/callback/google');
+  const local127Uri = getOAuthRedirectUri('http://127.0.0.1:4321/api/auth/google');
+  assert.strictEqual(local127Uri, 'http://127.0.0.1:4321/api/auth/callback/google');
+  console.log('   ✓ Localhost requests strictly produce localhost redirect URIs.\n');
+
+  // Test 48: Production request produces canonical production redirect URI
+  console.log('48. Production request produces canonical production redirect URI...');
+  const prodUri = getOAuthRedirectUri('https://raj-corner.vercel.app/api/auth/google');
+  assert.strictEqual(prodUri, 'https://raj-corner.vercel.app/api/auth/callback/google');
+  assert.strictEqual(CANONICAL_SITE_URL, 'https://raj-corner.vercel.app');
+  console.log('   ✓ Production requests strictly produce canonical production redirect URI.\n');
+
+  // Test 49: Temporary *.vercel.app deployment URL does NOT become OAuth callback
+  console.log('49. Temporary *.vercel.app deployment URL does NOT become the OAuth callback...');
+  const previewUri1 = getOAuthRedirectUri('https://raj-corner-8km5ueenj-rajwavs-projects.vercel.app/api/auth/google');
+  assert.strictEqual(previewUri1, 'https://raj-corner.vercel.app/api/auth/callback/google');
+  const previewUri2 = getOAuthRedirectUri('https://raj-corner-git-feat-test-rajwavs-projects.vercel.app/api/auth/google');
+  assert.strictEqual(previewUri2, 'https://raj-corner.vercel.app/api/auth/callback/google');
+  const arbitraryHostUri = getOAuthRedirectUri('https://attacker-injected-host.com/api/auth/google');
+  assert.strictEqual(arbitraryHostUri, 'https://raj-corner.vercel.app/api/auth/callback/google');
+  assert.strictEqual(isTemporaryVercelHostname('raj-corner-8km5ueenj-rajwavs-projects.vercel.app'), true);
+  assert.strictEqual(isTemporaryVercelHostname('raj-corner.vercel.app'), false);
+  console.log('   ✓ Temporary Vercel deployment hostnames and arbitrary hosts are strictly canonicalized.\n');
+
+  // Test 50: Explicit valid environment override is supported, but temporary Vercel override is rejected
+  console.log('50. Explicit environment variables (PUBLIC_SITE_URL/SITE_URL) handling...');
+  const originalEnvUrl = process.env.PUBLIC_SITE_URL;
+  try {
+    process.env.PUBLIC_SITE_URL = 'https://custom-domain.example.com';
+    const customUri = getOAuthRedirectUri('https://custom-domain.example.com/api/auth/google');
+    assert.strictEqual(customUri, 'https://custom-domain.example.com/api/auth/callback/google');
+
+    // If PUBLIC_SITE_URL is set to a temporary preview vercel domain, it must be rejected in favor of canonical
+    process.env.PUBLIC_SITE_URL = 'https://raj-corner-preview-temp.vercel.app';
+    const tempOverrideUri = getOAuthRedirectUri('https://raj-corner-preview-temp.vercel.app/api/auth/google');
+    assert.strictEqual(tempOverrideUri, 'https://raj-corner.vercel.app/api/auth/callback/google');
+  } finally {
+    if (originalEnvUrl !== undefined) {
+      process.env.PUBLIC_SITE_URL = originalEnvUrl;
+    } else {
+      delete process.env.PUBLIC_SITE_URL;
+    }
+  }
+  console.log('   ✓ Custom environment overrides are supported while temporary vercel domains are safely rejected.\n');
+
+  // Test 51: Authorization request and callback token exchange use identical redirect URI
+  console.log('51. Authorization request and callback token exchange use identical redirect URI...');
+  const testOrigins = [
+    'http://localhost:4321/api/auth/google',
+    'https://raj-corner.vercel.app/api/auth/google',
+    'https://raj-corner-8km5ueenj-rajwavs-projects.vercel.app/api/auth/google',
+  ];
+  for (const testUrl of testOrigins) {
+    const authInitiateRedirectUri = getOAuthRedirectUri(new URL(testUrl));
+    const tokenExchangeRedirectUri = getOAuthRedirectUri(new URL(testUrl.replace('/google', '/callback/google')));
+    assert.strictEqual(
+      authInitiateRedirectUri,
+      tokenExchangeRedirectUri,
+      `Redirect URIs must match for ${testUrl}`
+    );
+  }
+  console.log('   ✓ Authorization initiation and token exchange callbacks are guaranteed identical.\n');
+
+  console.log('🎉 ALL 51 SECURITY, PERIMETER, INTERESTS & OAUTH TESTS PASSED PERFECTLY!\n');
+  console.log('   (21 original security tests + 10 public-world-visibility tests + 5 guardrail tests + 4 people architecture tests + 6 interests world public tests + 5 OAuth canonical redirect tests)\n');
 }
 
 runTests().catch(err => {
