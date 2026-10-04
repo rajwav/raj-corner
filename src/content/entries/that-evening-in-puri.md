@@ -8,7 +8,7 @@ mood: []
 tags: ["ocean","small-things"]
 description: "The kind of moment that is too small for a travel post and too good to lose."
 related: ["first-ocean","puri-sunrise"]
-status: draft
+status: past
 featured: false
 accent: sand
 ---
