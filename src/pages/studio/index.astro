@@ -1,0 +1,24 @@
+---
+export const prerender = false;
+
+import { getSessionFromCookies, isOwnerSession } from '../../lib/access-control/auth';
+
+const session = Astro.locals.session ?? getSessionFromCookies(Astro.request.headers.get('cookie'));
+
+if (!session) {
+  return Astro.redirect(`/login?redirect=${encodeURIComponent('/studio')}`);
+}
+
+if (!isOwnerSession(session)) {
+  return new Response('Forbidden: Studio mode is restricted to the site owner.', { status: 403 });
+}
+
+// Activate Studio mode for the owner
+Astro.cookies.set('raj_studio', '1', {
+  path: '/',
+  sameSite: 'lax',
+  maxAge: 60 * 60 * 24 * 365,
+});
+
+return Astro.redirect(Astro.url.searchParams.get('redirect') || '/');
+---

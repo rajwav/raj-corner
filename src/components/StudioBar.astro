@@ -1,0 +1,221 @@
+---
+import { getCaptureEditorUrl, getCaptureWorkspaceUrl } from '../lib/studio';
+
+export interface Props {
+  currentEntryId?: string;
+  captureBase?: string;
+}
+
+const { currentEntryId, captureBase } = Astro.props;
+
+// Auto-detect entry ID from URL pathname if on an entry page
+const pathMatch = Astro.url.pathname.match(/^\/entry\/([^/]+)/);
+const detectedEntryId = pathMatch ? decodeURIComponent(pathMatch[1]) : undefined;
+const resolvedEntryId = currentEntryId || detectedEntryId;
+
+const captureEditorUrl = resolvedEntryId ? getCaptureEditorUrl(resolvedEntryId, captureBase) : null;
+const captureHomeUrl = getCaptureWorkspaceUrl(captureBase);
+const currentPath = Astro.url.pathname;
+---
+<aside class="studio-bar-container" aria-label="Owner Studio Control Room">
+  <div class="studio-bar-inner">
+    <div class="studio-bar-left">
+      <span class="studio-brand">RAJ'S CORNER <span class="studio-dot">·</span> STUDIO</span>
+      <span class="studio-badge" title="Authenticated as Owner">
+        <span class="studio-live-dot" aria-hidden="true"></span>
+        OWNER PREVIEW
+      </span>
+    </div>
+
+    <div class="studio-bar-center">
+      {captureEditorUrl && (
+        <a href={captureEditorUrl} class="studio-btn studio-btn-primary" target="_blank" rel="noopener" title="Open this entry in the existing Capture editor">
+          <span class="btn-icon">✎</span> Edit in Capture
+        </a>
+      )}
+      <a href={captureHomeUrl} class="studio-btn" target="_blank" rel="noopener" title="Open Capture workspace">
+        Capture Workspace ↗
+      </a>
+    </div>
+
+    <div class="studio-bar-right">
+      <button type="button" id="studio-btn-publish" class="studio-btn studio-btn-publish" title="Commit and deploy all local changes to GitHub & Vercel">
+        🚀 Publish to Web
+      </button>
+      <a href={`/api/studio/toggle?active=0&redirect=${encodeURIComponent(currentPath)}`} class="studio-btn studio-btn-ghost" title="Preview page as an unauthenticated visitor">
+        View as Public
+      </a>
+    </div>
+  </div>
+</aside>
+
+<script>
+  const publishBtn = document.getElementById('studio-btn-publish');
+  if (publishBtn) {
+    publishBtn.addEventListener('click', async () => {
+      const confirmPublish = confirm("Publish all local changes to the live website?\n\nThis will commit all local Markdown and media updates to GitHub, triggering live deployment on Vercel.");
+      if (!confirmPublish) return;
+
+      const originalHtml = publishBtn.innerHTML;
+      publishBtn.setAttribute('disabled', 'true');
+      publishBtn.innerHTML = 'Publishing... ⏳';
+
+      try {
+        const res = await fetch('/api/publish', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          throw new Error(data.error || 'Publish failed');
+        }
+        publishBtn.innerHTML = '✓ Published!';
+        alert(data.message || 'Published to GitHub! Vercel is now deploying your live website.');
+      } catch (err: any) {
+        console.error('Publish error:', err);
+        alert('Could not publish: ' + (err.message || 'Unknown error occurred.'));
+      } finally {
+        setTimeout(() => {
+          publishBtn.removeAttribute('disabled');
+          publishBtn.innerHTML = originalHtml;
+        }, 3000);
+      }
+    });
+  }
+</script>
+
+<style>
+  .studio-bar-container {
+    position: sticky;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 9999;
+    background: #18191c;
+    color: #e2e4e8;
+    border-bottom: 1px solid #2d3038;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    font-family: var(--mono, monospace);
+    font-size: 11px;
+  }
+
+  .studio-bar-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 8px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .studio-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .studio-brand {
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #f4f5f8;
+  }
+
+  .studio-dot {
+    opacity: 0.4;
+  }
+
+  .studio-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    padding: 2px 7px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    color: #a5b4fc;
+  }
+
+  .studio-live-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #50e3c2;
+    box-shadow: 0 0 6px #50e3c2;
+  }
+
+  .studio-bar-center {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .studio-bar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .studio-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-family: var(--mono, monospace);
+    font-size: 11px;
+    text-decoration: none;
+    color: #cbd5e1;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .studio-btn:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+
+  .studio-btn-primary {
+    background: #2e384d;
+    border-color: #4a5d80;
+    color: #f1f5f9;
+    font-weight: 500;
+  }
+
+  .studio-btn-primary:hover {
+    background: #3b4863;
+    border-color: #637ba7;
+  }
+
+  .studio-btn-publish {
+    background: #047857;
+    border-color: #059669;
+    color: #fff;
+    font-weight: 600;
+  }
+
+  .studio-btn-publish:hover {
+    background: #059669;
+    border-color: #10b981;
+  }
+
+  .studio-btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: #94a3b8;
+  }
+
+  .studio-btn-ghost:hover {
+    color: #e2e8f0;
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  @media (max-width: 768px) {
+    .studio-bar-inner {
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+  }
+</style>

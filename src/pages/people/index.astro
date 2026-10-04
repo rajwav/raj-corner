@@ -1,0 +1,368 @@
+---
+export const prerender = false;
+
+import Base from '../../layouts/Base.astro';
+import { entries } from '../../lib/universe';
+import { filterVisibleEntries } from '../../lib/access-control/policy';
+import { buildPeopleDirectory } from '../../lib/people';
+
+const session = Astro.locals.session ?? null;
+const rawAll = await entries();
+const visibleEntries = await filterVisibleEntries(rawAll, session);
+const visibleEntryIds = new Set(visibleEntries.map(e => e.id));
+
+const people = buildPeopleDirectory(rawAll);
+
+// Formatter to get month and day for event traces
+const dayMonth = (date?: Date) => date ? date.toLocaleDateString('en', { month: 'short', day: 'numeric' }) : '';
+---
+
+<Base title="People · Raj's Corner">
+  <article class="people-container">
+    <header class="people-header">
+      <span class="people-label">Relationships & Presence</span>
+      <h1 class="people-title">People</h1>
+      <p class="people-lede">The individuals who shaped the journey, shared the hours, and left traces across the archive.</p>
+    </header>
+
+    <div class="people-directory">
+      {people.map(({ person, events }) => {
+        const isPersonAccessible = visibleEntryIds.has(person.id);
+        const isPersonAbsPrivate = person.data.visibility === 'absolute_private';
+
+        return (
+          <div class="person-node">
+            <div class="person-main">
+              {!isPersonAccessible ? (
+                <div class="person-locked-card">
+                  <a href={`/entry/${person.id}/`} class="locked-entry-link" aria-label={`Private person: ${person.data.title}`}>
+                    <div class="locked-entry-inner">
+                      <span class="locked-icon" aria-hidden="true">🔒</span>
+                      <span class="locked-title">{person.data.title}</span>
+                      <span class="locked-badge">{isPersonAbsPrivate ? 'Owner only' : 'Private'}</span>
+                    </div>
+                  </a>
+                </div>
+              ) : (
+                <div class="person-card">
+                  <a href={`/entry/${person.id}/`} class="person-name-link">
+                    <h3 class="person-name">{person.data.title}</h3>
+                  </a>
+                  {person.data.location && (
+                    <span class="person-location">{person.data.location}</span>
+                  )}
+                  <a href={`/entry/${person.id}/`} class="person-arrow" aria-label={`View ${person.data.title}`}>
+                    Enter profile →
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {events.length > 0 && (
+              <div class="person-events-branch">
+                <div class="events-rail-label">Events &amp; Memories</div>
+                <ul class="person-events-list">
+                  {events.map(event => {
+                    const isEventAccessible = visibleEntryIds.has(event.id);
+                    const isEventAbsPrivate = event.data.visibility === 'absolute_private';
+
+                    return (
+                      <li class="person-event-item">
+                        {!isEventAccessible ? (
+                          <a href={`/entry/${event.id}/`} class="locked-entry-link" aria-label={`Private event: ${event.data.title}`}>
+                            <div class="locked-entry-inner">
+                              <span class="locked-icon" aria-hidden="true">🔒</span>
+                              <span class="locked-title">{event.data.title}</span>
+                              <span class="locked-badge">{isEventAbsPrivate ? 'Owner only' : 'Private'}</span>
+                            </div>
+                          </a>
+                        ) : (
+                          <a href={`/entry/${event.id}/`} class="person-event-link">
+                            <div class="event-meta">
+                              {event.data.date ? (
+                                <time class="event-date">{dayMonth(event.data.date)}</time>
+                              ) : (
+                                <span class="event-date">Undated</span>
+                              )}
+                              <span class="event-type">{event.data.type}</span>
+                            </div>
+                            <span class="event-title">{event.data.title}</span>
+                            <span class="event-arrow">→</span>
+                          </a>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+
+    <aside class="universe-continuation">
+      <div class="continuation-actions">
+        <a href="/timeline/" class="cont-action">Explore Timeline →</a>
+        <a href="/places/" class="cont-action">Open Atlas →</a>
+        <a href="/archive/" class="cont-action">Wander the Archive →</a>
+        <a href="/random/" class="cont-action">Surprise Me →</a>
+      </div>
+    </aside>
+  </article>
+</Base>
+
+<style>
+.people-container {
+  padding: 80px clamp(24px, 13vw, 200px) 120px;
+}
+.people-header {
+  margin-bottom: 100px;
+  max-width: 800px;
+  border-bottom: 1px solid var(--line, #0000001f);
+  padding-bottom: 40px;
+}
+.people-label {
+  font-family: var(--mono, monospace);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-light, #8a8880);
+  display: block;
+  margin-bottom: 18px;
+}
+.people-title {
+  font-family: var(--serif, Georgia, serif);
+  font-size: clamp(48px, 6vw, 84px);
+  margin-bottom: 24px;
+  line-height: 1.05;
+}
+.people-lede {
+  font-family: var(--serif, Georgia, serif);
+  font-size: 20px;
+  font-style: italic;
+  max-width: 620px;
+  color: var(--ink, #1f1e1c);
+  opacity: 0.85;
+  line-height: 1.45;
+}
+
+.people-directory {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  max-width: 800px;
+}
+
+
+.person-node {
+  position: relative;
+}
+
+.person-main {
+  margin-bottom: 14px;
+}
+
+.person-card {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 12px 18px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid var(--line, #0000001f);
+  transition: background 0.15s, border-color 0.15s;
+}
+.person-card:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: var(--ink, #1f1e1c);
+}
+
+.person-name-link {
+  text-decoration: none;
+  color: inherit;
+}
+.person-name {
+  font-family: var(--serif, Georgia, serif);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--ink, #1f1e1c);
+  margin: 0;
+}
+
+.person-location {
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  color: var(--text-light, #8a8880);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.person-arrow {
+  margin-left: auto;
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  color: var(--text-light, #8a8880);
+  text-decoration: none;
+  transition: color 0.15s, transform 0.15s;
+}
+.person-card:hover .person-arrow {
+  color: var(--ink, #1f1e1c);
+  transform: translateX(3px);
+}
+
+/* Branching events tree */
+.person-events-branch {
+  margin-left: 24px;
+  padding-left: 24px;
+  border-left: 1px solid var(--line, #0000001f);
+  margin-top: 8px;
+}
+
+.events-rail-label {
+  font-family: var(--mono, monospace);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-light, #8a8880);
+  margin-bottom: 10px;
+  opacity: 0.7;
+}
+
+.person-events-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.person-event-item {
+  position: relative;
+}
+
+.person-event-link {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 14px;
+  border-radius: 4px;
+  text-decoration: none;
+  color: inherit;
+  background: var(--bg, #fcfbf9);
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+.person-event-link:hover {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: var(--line, #0000002e);
+  transform: translateX(4px);
+}
+
+.event-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.event-date {
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  color: var(--text-light, #8a8880);
+}
+
+.event-type {
+  font-family: var(--mono, monospace);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--ink, #1f1e1c);
+}
+
+.event-title {
+  font-family: var(--serif, Georgia, serif);
+  font-size: 15px;
+  color: var(--ink, #1f1e1c);
+  flex: 1;
+}
+
+.event-arrow {
+  font-family: var(--mono, monospace);
+  font-size: 12px;
+  color: var(--text-light, #8a8880);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.person-event-link:hover .event-arrow {
+  opacity: 1;
+}
+
+/* Locked items */
+.locked-entry-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+.locked-entry-inner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 1rem;
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px dashed var(--line, #0000002e);
+  border-radius: 4px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.locked-entry-link:hover .locked-entry-inner {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: var(--ink, #1f1e1c);
+}
+.locked-icon {
+  font-size: 0.85rem;
+}
+.locked-title {
+  font-family: var(--serif, Georgia, serif);
+  font-size: 0.92rem;
+  color: var(--ink, #1f1e1c);
+  flex: 1;
+}
+.locked-badge {
+  font-family: var(--mono, monospace);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-light, #8a8880);
+}
+
+@media (max-width: 768px) {
+  .people-container {
+    padding: 60px 20px;
+  }
+  .people-era {
+    padding-left: 20px;
+    margin-left: 10px;
+  }
+  .person-card {
+    flex-direction: column;
+    gap: 6px;
+  }
+  .person-arrow {
+    margin-left: 0;
+  }
+  .person-events-branch {
+    margin-left: 12px;
+    padding-left: 12px;
+  }
+  .person-event-link {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}
+</style>

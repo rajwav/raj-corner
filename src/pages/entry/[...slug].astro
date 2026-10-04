@@ -10,6 +10,7 @@ import { niceDate, placeSlug, entryWorld } from '../../lib/universe';
 import { parseMentionsInText } from '../../lib/mentions';
 import { renderEntryHeader, renderEntryCover, renderEntryTags, renderPersonTraces, renderContinuation, getPresentationClasses } from '../../lib/entryTemplate.js';
 import { evaluateAccess, filterVisibleEntries } from '../../lib/access-control/policy';
+import { isStudioActive, getCaptureEditorUrl } from '../../lib/studio';
 
 const rawSlug = Astro.params.slug || '';
 const slug = rawSlug.replace(/\/+$/, '');
@@ -25,6 +26,8 @@ const session = Astro.locals.session ?? null;
 const access = await evaluateAccess({
   path: `/entry/${entry.id}`,
   world: entryWorld(entry),
+  type: entry.data.type,
+  category: (entry.data as any).category,
   visibility: entry.data.visibility,
   allowRequests: entry.data.allowRequests,
 }, session);
@@ -133,8 +136,10 @@ if (access.allowed) {
 } else {
   Astro.response.status = access.reason === 'unauthenticated' ? 401 : 403;
 }
+
+const studioActive = isStudioActive(session, Astro.cookies.get('raj_studio')?.value);
 ---
-<Base title={access.allowed ? `${entry.data.title} · Raj's Corner` : `Access Protected · Raj's Corner`}>
+<Base title={access.allowed ? `${entry.data.title} · Raj's Corner` : `Access Protected · Raj's Corner`} entryId={entry.id}>
   {!access.allowed ? (
     <AccessGate
       evaluation={access}
@@ -148,6 +153,14 @@ if (access.allowed) {
   ) : (
     <>
       <article class={`artifact-page ${entry.data.accent} ${entry.data.type === 'person' ? 'person-artifact' : ''} ${getPresentationClasses(entry.data.presentation)}`}>
+        {studioActive && (
+          <div class="studio-entry-banner" aria-label="Studio quick actions">
+            <span class="studio-entry-tag">Studio Mode · Visibility: <strong>{entry.data.visibility || 'public'}</strong></span>
+            <a href={getCaptureEditorUrl(entry.id)} target="_blank" rel="noopener" class="studio-entry-edit-link">
+              ✎ Edit in Capture ↗
+            </a>
+          </div>
+        )}
         <div set:html={renderEntryHeader(entry.data, entry.data.type === 'person', niceDate(entry.data.date), placeSlug(entry.data.location || ''), entryWorld(entry))} />
         <div set:html={renderEntryCover(entry.data, entry.data.type === 'person', niceDate(entry.data.date))} />
 
@@ -243,5 +256,32 @@ if (access.allowed) {
     }
   });
 </script>
+
+<style>
+  .studio-entry-banner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 14px;
+    margin-bottom: 24px;
+    background: rgba(30, 41, 59, 0.04);
+    border: 1px dashed rgba(30, 41, 59, 0.25);
+    border-radius: 4px;
+    font-family: var(--mono, monospace);
+    font-size: 11px;
+  }
+  .studio-entry-tag {
+    color: #475569;
+    letter-spacing: 0.04em;
+  }
+  .studio-entry-edit-link {
+    color: #1e293b;
+    text-decoration: underline;
+    font-weight: 500;
+  }
+  .studio-entry-edit-link:hover {
+    color: #047857;
+  }
+</style>
 
 </Base>

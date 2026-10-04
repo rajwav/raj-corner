@@ -6,6 +6,8 @@ if (typeof process.loadEnvFile === 'function') {
 }
 
 import { evaluateAccess, filterVisibleEntries, PUBLIC_WORLD_SLUGS, isPublicWorldLandingPath } from '../src/lib/access-control/policy.ts';
+import { buildLifeSections, buildPeopleDirectory, isEntryRelatedToPerson, getEntriesForPerson } from '../src/lib/people.ts';
+
 import { 
   createSessionToken, 
   verifySessionToken, 
@@ -678,8 +680,245 @@ async function runTests() {
   assert.strictEqual(filteredForOwner.length, 3, 'Owner sees all entries in filterVisibleEntries');
   console.log('   ✓ filterVisibleEntries properly protects private entries.\n');
 
-  console.log('🎉 ALL 36 SECURITY & PERIMETER TESTS PASSED PERFECTLY!\n');
-  console.log('   (21 original security tests + 10 public-world-visibility tests + 5 comprehensive guardrail tests)\n');
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Tests 37-40: PEOPLE / RELATIONSHIPS ARCHITECTURE & CHRONOLOGY
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  console.log('═══════════════════════════════════════════════════════════════════');
+  console.log(' PEOPLE & RELATIONSHIPS ARCHITECTURE TESTS (37-40)');
+  console.log('═══════════════════════════════════════════════════════════════════\n');
+
+  // Test 37: Life sections: Chronology (2026, 2023), People (independent of dates), Timeless
+  console.log('37. Life sections: Chronology (2026, 2023), People (Shakti Prasad Tripathy, Aditya Bishoyi)...');
+  const testLifeEntries = [
+    {
+      id: 'the-day-we-faced-the-needle',
+      data: {
+        title: '🩸 THE DAY WE FACED THE NEEDLE',
+        type: 'memory',
+        world: 'life',
+        date: new Date('2026-09-30'),
+        related: ['banamudra-sahoo'],
+        people: ['BANAMUDRA SAHOO']
+      }
+    },
+    {
+      id: 'the-cycling-accident',
+      data: {
+        title: 'The Cycling Accident',
+        type: 'memory',
+        world: 'life',
+        date: new Date('2026-09-08'),
+        related: [],
+        people: ['Abhisekh']
+      }
+    },
+    {
+      id: 'the-cupboard-the-balcony-and-the-nda-bahana',
+      data: {
+        title: 'The Cupboard, the Balcony & the NDA Bahana',
+        type: 'memory',
+        world: 'life',
+        date: new Date('2023-09-05'),
+        related: ['shakti', 'aditya-bishoyi'],
+        people: ['Shakti Prasad Tripathy', 'Aditya Bishoyi']
+      }
+    },
+    {
+      id: 'banamudra-sahoo',
+      data: { title: 'BANAMUDRA SAHOO', type: 'person', world: 'life', related: [] }
+    },
+    {
+      id: 'shakti',
+      data: { title: 'Shakti Prasad Tripathy', type: 'person', world: 'life', related: [] }
+    },
+    {
+      id: 'aditya-bishoyi',
+      data: { title: 'Aditya Bishoyi', type: 'person', world: 'life', related: [] }
+    }
+  ];
+
+  const sections = buildLifeSections(testLifeEntries, testLifeEntries);
+  
+  // 1. Chronology: 2026 and 2023 appear, containing ONLY memories/events, NEVER people
+  assert.strictEqual(sections.years.length, 2, 'Should have 2 chronological years: 2026 and 2023');
+  assert.strictEqual(sections.years[0].year, '2026');
+  assert.strictEqual(sections.years[0].entries.length, 2, '2026 has 2 memories/events');
+  assert.strictEqual(sections.years[1].year, '2023');
+  assert.strictEqual(sections.years[1].entries.length, 1, '2023 has 1 memory');
+  assert.strictEqual(sections.years[1].entries[0].id, 'the-cupboard-the-balcony-and-the-nda-bahana');
+  
+  for (const yr of sections.years) {
+    const hasPerson = yr.entries.some(e => e.data.type === 'person');
+    assert.strictEqual(hasPerson, false, `Critical rule: people must NEVER be assigned to years in chronology (${yr.year})`);
+  }
+
+  // 2. People: independent of dates (Banamudra Sahoo, Shakti Prasad Tripathy, Aditya Bishoyi)
+  assert.strictEqual(sections.people.length, 3, 'Exactly 3 distinct people in directory (no duplicates)');
+  
+  const banamudraItem = sections.people.find(p => p.person.id === 'banamudra-sahoo');
+  assert(banamudraItem, 'Banamudra must exist under People');
+  assert.strictEqual(banamudraItem.events.length, 1, 'Banamudra has 1 related memory');
+  assert.strictEqual(banamudraItem.events[0].id, 'the-day-we-faced-the-needle');
+
+  const shaktiItem = sections.people.find(p => p.person.id === 'shakti');
+  assert(shaktiItem, 'Shakti Prasad Tripathy must exist under People');
+  assert.strictEqual(shaktiItem.person.data.title, 'Shakti Prasad Tripathy');
+  assert.strictEqual(shaktiItem.events.length, 1, 'Shakti has 1 related memory from 2023');
+  assert.strictEqual(shaktiItem.events[0].id, 'the-cupboard-the-balcony-and-the-nda-bahana');
+  assert.strictEqual(shaktiItem.person.data.date, undefined, 'Shakti must not have an artificial date');
+
+  const adityaItem = sections.people.find(p => p.person.id === 'aditya-bishoyi');
+  assert(adityaItem, 'Aditya Bishoyi must exist under People');
+  assert.strictEqual(adityaItem.person.data.title, 'Aditya Bishoyi');
+  assert.strictEqual(adityaItem.events.length, 1, 'Aditya has 1 related memory from 2023');
+  assert.strictEqual(adityaItem.events[0].id, 'the-cupboard-the-balcony-and-the-nda-bahana');
+  assert.strictEqual(adityaItem.person.data.date, undefined, 'Aditya must not have an artificial date');
+  console.log('   ✓ Life page cleanly separates Chronology (2026, 2023) and People (independent of dates).\n');
+
+  // Test 38: Extensibility: easily add future people (Abhijeet, Priyanshu) without redesigning
+  console.log('38. Extensibility: add people dynamically (Abhijeet, Priyanshu) and Timeless support...');
+  const extendedEntries = [
+    ...testLifeEntries,
+    {
+      id: 'abhijeet',
+      data: { title: 'Abhijeet', type: 'person', world: 'life', related: [] }
+    },
+    {
+      id: 'priyanshu',
+      data: { title: 'Priyanshu', type: 'person', world: 'life', related: [] }
+    },
+    {
+      id: 'timeless-fragment',
+      data: {
+        title: 'A Timeless Thought',
+        type: 'note',
+        world: 'life'
+      }
+    }
+  ];
+
+  const extendedSections = buildLifeSections(extendedEntries, extendedEntries);
+  assert.strictEqual(extendedSections.people.length, 5, 'Includes Banamudra, Shakti, Aditya, Abhijeet, Priyanshu');
+  const abhijeet = extendedSections.people.find(p => p.person.id === 'abhijeet');
+  const priyanshu = extendedSections.people.find(p => p.person.id === 'priyanshu');
+  assert(abhijeet && priyanshu, 'Future people seamlessly integrated');
+  assert.strictEqual(extendedSections.timeless.length, 1, 'Timeless section contains genuinely undated entries');
+  assert.strictEqual(extendedSections.timeless[0].id, 'timeless-fragment');
+  const timelessHasPerson = extendedSections.timeless.some(e => e.data.type === 'person');
+  assert.strictEqual(timelessHasPerson, false, 'Timeless must NOT contain people merely because they lack a date');
+  console.log('   ✓ People directory and Timeless sections dynamically extend with zero friction.\n');
+
+
+
+  // Test 39: Server-side authorization on Person entity /entry/shakti
+  console.log('39. Access control: /entry/shakti is private by default and protected...');
+  const shaktiUnauth = await evaluateAccess({ path: '/entry/shakti', world: 'life' }, null);
+  assert.strictEqual(shaktiUnauth.allowed, false, 'Unauthenticated visitor cannot access private person profile');
+  assert.strictEqual(shaktiUnauth.reason, 'unauthenticated');
+
+  const shaktiOwner = await evaluateAccess({ path: '/entry/shakti', world: 'life' }, ownerSession);
+  assert.strictEqual(shaktiOwner.allowed, true, 'Owner has access to person profile');
+  assert.strictEqual(shaktiOwner.reason, 'owner');
+  console.log('   ✓ Person entity /entry/shakti access evaluation passed.\n');
+
+  // Test 40: /people route evaluation is safe and does not trigger redirect loop
+  console.log('40. Route safety: /people evaluates safely without throwing or redirect loops...');
+  const peopleEval = await evaluateAccess({ path: '/people' }, null);
+  assert(typeof peopleEval.allowed === 'boolean', 'evaluateAccess must handle /people safely');
+  console.log('   ✓ /people evaluates safely.\n');
+
+  console.log('═══════════════════════════════════════════════════════════════════');
+  console.log(' THINGS I LIKE / INTERESTS WORLD PUBLIC ACCESS TESTS (41-46)');
+  console.log('═══════════════════════════════════════════════════════════════════\n');
+
+  // Test 41: /world/interests/ is public
+  console.log('41. /world/interests/ landing page is public...');
+  const interestsLanding = await evaluateAccess({ path: '/world/interests', world: 'interests' }, null);
+  assert.strictEqual(interestsLanding.allowed, true);
+  assert.strictEqual(interestsLanding.reason, 'public');
+  assert.strictEqual(interestsLanding.visibility, 'public');
+  console.log('   ✓ /world/interests is accessible without authentication.\n');
+
+  // Test 42: an Interests child entry is public
+  console.log('42. Existing Interests child entries (Music, Cars, Space, Books, Games, Sports, Fitness, etc.) are public...');
+  const porscheEval = await evaluateAccess({ path: '/entry/porsche-911', world: 'interests', type: 'car' }, null);
+  assert.strictEqual(porscheEval.allowed, true);
+  assert.strictEqual(porscheEval.visibility, 'public');
+  assert.strictEqual(porscheEval.reason, 'public');
+
+  const chessEval = await evaluateAccess({ path: '/entry/chess', world: 'interests', type: 'chess' }, null);
+  assert.strictEqual(chessEval.allowed, true);
+  assert.strictEqual(chessEval.visibility, 'public');
+
+  const ruposhEval = await evaluateAccess({ path: '/entry/ruposh', world: 'interests', type: 'music' }, null);
+  assert.strictEqual(ruposhEval.allowed, true);
+  assert.strictEqual(ruposhEval.visibility, 'public');
+  console.log('   ✓ Existing Interests child entries evaluate to public.\n');
+
+  // Test 43: Unauthenticated visitor can access an Interests child directly
+  console.log('43. Unauthenticated visitor can access Interests child directly without login redirect...');
+  const visitorMusicEval = await evaluateAccess({ path: '/entry/preet-re', world: 'interests' }, null);
+  assert.strictEqual(visitorMusicEval.allowed, true);
+  assert.strictEqual(visitorMusicEval.reason, 'public');
+  console.log('   ✓ Unauthenticated visitor granted direct access to Interests child.\n');
+
+  // Test 44: Future/default Interests entries are public automatically without manual visibility setting
+  console.log('44. Future / default Interests entries default to PUBLIC automatically...');
+  const futureInterest = await evaluateAccess({
+    path: `/entry/future-interest-${runId}`,
+    world: 'interests',
+    // no visibility set
+  }, null);
+  assert.strictEqual(futureInterest.allowed, true);
+  assert.strictEqual(futureInterest.visibility, 'public');
+
+  const futureByInterestType = await evaluateAccess({
+    path: `/entry/future-gadget-${runId}`,
+    type: 'technology',
+    // no world, no visibility set
+  }, null);
+  assert.strictEqual(futureByInterestType.allowed, true);
+  assert.strictEqual(futureByInterestType.visibility, 'public');
+  console.log('   ✓ Future entries under world: interests default to public automatically.\n');
+
+  // Test 45: Interests public access does NOT make Life/Travel/Making public
+  console.log('45. Interests public access does NOT make Life/Travel/Making child entries public...');
+  const lifeChild = await evaluateAccess({ path: `/entry/life-check-${runId}`, world: 'life' }, null);
+  assert.strictEqual(lifeChild.allowed, false, 'Life child must remain private');
+  assert.strictEqual(lifeChild.reason, 'unauthenticated');
+
+  const travelChild = await evaluateAccess({ path: `/entry/travel-check-${runId}`, world: 'travel' }, null);
+  assert.strictEqual(travelChild.allowed, false, 'Travel child must remain private');
+  assert.strictEqual(travelChild.reason, 'unauthenticated');
+
+  const makingChild = await evaluateAccess({ path: `/entry/making-check-${runId}`, world: 'making' }, null);
+  assert.strictEqual(makingChild.allowed, false, 'Making child must remain private');
+  assert.strictEqual(makingChild.reason, 'unauthenticated');
+  console.log('   ✓ Life, Travel, and Making child entries strictly remain private by default.\n');
+
+  // Test 46: Existing private access-control behavior elsewhere remains unchanged
+  console.log('46. Existing private access-control behavior elsewhere remains unchanged...');
+  // Person profile stays private
+  const personEval = await evaluateAccess({ path: '/entry/shakti', world: 'life' }, null);
+  assert.strictEqual(personEval.allowed, false);
+
+  // Absolute private remains owner-only even if someone sets world: interests
+  const absPrivInterests = await evaluateAccess({
+    path: `/entry/abs-priv-test-${runId}`,
+    world: 'interests',
+    visibility: 'absolute_private',
+  }, null);
+  assert.strictEqual(absPrivInterests.allowed, false, 'Explicit absolute_private must remain locked');
+  assert.strictEqual(absPrivInterests.visibility, 'absolute_private');
+
+  // Aggregate protected section remains protected
+  const timelineEval = await evaluateAccess({ path: '/timeline' }, null);
+  assert.strictEqual(timelineEval.allowed, false);
+  console.log('   ✓ Existing security perimeter, absolute-private, and other worlds remain intact.\n');
+
+  console.log('🎉 ALL 46 SECURITY, PERIMETER & INTERESTS TESTS PASSED PERFECTLY!\n');
+  console.log('   (21 original security tests + 10 public-world-visibility tests + 5 guardrail tests + 4 people architecture tests + 6 interests world public tests)\n');
 }
 
 runTests().catch(err => {

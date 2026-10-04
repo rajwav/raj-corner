@@ -5,8 +5,110 @@ import { isOwnerSession } from './auth';
 export interface ResourceSpec {
   path: string;
   world?: string;
+  category?: string;
+  type?: string;
   visibility?: Visibility;
   allowRequests?: boolean;
+}
+
+/**
+ * Types that belong to the 'interests' (Things I Like) world.
+ */
+export const INTERESTS_ENTRY_TYPES = new Set([
+  'car', 'music', 'book', 'movie', 'anime', 'series', 'space',
+  'chess', 'game', 'sport', 'fitness', 'run', 'workout', 'challenge',
+  'technology', 'obsession', 'collection'
+]);
+
+/**
+ * Slugs of known entries in the 'interests' world.
+ */
+export const KNOWN_INTERESTS_SLUGS = new Set([
+  'alan-walker-collection',
+  'anime-collection',
+  'astrophysics-and-the-deep-cosmos',
+  'basketball-to-play',
+  'bmw-m5',
+  'call-of-duty-mobile',
+  'challenge-be-consistent',
+  'chess',
+  'cricket',
+  'eminem-collection',
+  'exoplanets-and-extreme-worlds',
+  'films-collection',
+  'football-to-play',
+  'kabaddi',
+  'matiks',
+  'operating-system-concepts-galvin',
+  'porsche-911',
+  'preet-re',
+  'rolls-royce-ghost',
+  'ruposh',
+  'series-collection',
+  'songs-for-the-road',
+  'taqdeer-soundtrack',
+  'technology-interests',
+  'temporary-obsessions',
+  'the-7-habits-of-highly-effective-people',
+  'the-nature-of-time-and-relativity',
+  'ty-i-ya-xcho'
+]);
+
+/**
+ * Category IDs that belong to the 'interests' (Things I Like) world.
+ */
+export const INTEREST_CATEGORY_IDS = new Set([
+  'interests',
+  'music',
+  'cars',
+  'space',
+  'books',
+  'games',
+  'sports',
+  'fitness',
+  'challenges',
+  'movies-anime',
+  'technology',
+  'temporary-obsessions'
+]);
+
+/**
+ * Returns true if the resource belongs to the 'interests' world.
+ * Per user mandate, the ENTIRE Interests world (all current and future child
+ * entries, categories, and landing page) defaults to completely PUBLIC.
+ */
+export function isInterestsResource(resource: ResourceSpec): boolean {
+  const w = (resource.world || '').toLowerCase().trim();
+  if (w === 'interests') return true;
+
+  const c = (resource.category || '').toLowerCase().trim();
+  if (c && INTEREST_CATEGORY_IDS.has(c)) return true;
+
+  const t = (resource.type || '').toLowerCase().trim();
+  if (t && INTERESTS_ENTRY_TYPES.has(t)) return true;
+
+  const p = normalizePath(resource.path).toLowerCase();
+  if (p === '/world/interests' || p.startsWith('/world/interests/')) return true;
+
+  if (p.startsWith('/entry/')) {
+    const slug = p.replace(/^\/entry\//, '').replace(/\/+$/, '');
+    if (KNOWN_INTERESTS_SLUGS.has(slug)) return true;
+  }
+
+  return false;
+}
+
+export function isFitnessResource(resource: ResourceSpec): boolean {
+  const t = (resource.type || '').toLowerCase().trim();
+  if (t === 'run' || t === 'workout' || t === 'fitness') return true;
+
+  const c = (resource.category || '').toLowerCase().trim();
+  if (c === 'fitness') return true;
+
+  const p = normalizePath(resource.path).toLowerCase();
+  if (p.includes('/fitness')) return true;
+
+  return false;
 }
 
 /**
@@ -56,16 +158,16 @@ export async function evaluateAccess(
 
   // 1. Check storage page override
   const pageOverride = await storage.getVisibilityOverride(normPath);
-  // Everything is private unless Raj has explicitly marked it public. This is
-  // intentionally independent of old content that has no visibility field.
+  // Everything is private unless Raj has explicitly marked it public, with the
+  // intentional exception of the entire 'interests' (Things I Like) world, where
+  // all child entries and categories default to PUBLIC per user mandate.
   const siteOverride = await storage.getVisibilityOverride('/');
-  // An entry declared absolute-private stays owner-only unless Raj sets an
-  // explicit override for that exact path; a site/world setting cannot weaken it.
+  const defaultVisibility: Visibility = isInterestsResource(resource) ? 'public' : 'private';
   let effectiveVisibility: Visibility = pageOverride
     ? pageOverride.visibility
     : resource.visibility === 'absolute_private'
       ? 'absolute_private'
-      : (siteOverride ? siteOverride.visibility : (resource.visibility || 'private'));
+      : (siteOverride ? siteOverride.visibility : (resource.visibility || defaultVisibility));
   let allowRequests: boolean = resource.allowRequests !== false;
 
   // 2. Check world-level override if applicable
@@ -197,7 +299,7 @@ export async function evaluateAccess(
   };
 }
 
-export async function filterVisibleEntries<T extends { id: string; data: { visibility?: Visibility; world?: string } }>(
+export async function filterVisibleEntries<T extends { id: string; data: { visibility?: Visibility; world?: string; type?: string; category?: string } }>(
   entriesList: T[],
   session: UserSession | null | undefined
 ): Promise<T[]> {
@@ -210,6 +312,8 @@ export async function filterVisibleEntries<T extends { id: string; data: { visib
     const evalResult = await evaluateAccess({
       path: `/entry/${entry.id}`,
       world: entry.data.world,
+      type: entry.data.type,
+      category: entry.data.category,
       visibility: entry.data.visibility,
     }, session);
     if (evalResult.allowed) {

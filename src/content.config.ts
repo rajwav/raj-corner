@@ -4,8 +4,14 @@ import { glob } from 'astro/loaders';
 
 const entrySchema = z.object({
   title: z.string(),
-  type: z.enum(['memory', 'travel', 'trip', 'photo', 'place', 'car', 'music', 'book', 'movie', 'anime', 'space', 'chess', 'experiment', 'project', 'idea', 'thought', 'person', 'milestone', 'dream', 'goal', 'collection', 'note']),
+  type: z.enum([
+    'memory', 'travel', 'trip', 'photo', 'place', 'car', 'music', 'book', 'movie', 'anime', 'space', 'chess',
+    'experiment', 'project', 'idea', 'thought', 'person', 'milestone', 'dream', 'goal', 'collection', 'note',
+    'game', 'sport', 'fitness', 'run', 'workout', 'challenge', 'series', 'technology', 'obsession'
+  ]),
   world: z.enum(['life', 'travel', 'interests', 'making', 'archive']).optional(),
+  category: z.string().optional(),
+  subcategory: z.string().optional(),
   date: z.coerce.date().optional(),
   location: z.string().optional(),
   artist: z.string().optional(),
@@ -22,6 +28,31 @@ const entrySchema = z.object({
   featured: z.boolean().default(false),
   status: z.enum(['past', 'now', 'future']).default('past'),
   accent: z.enum(['coral', 'sky', 'lime', 'night', 'sand']).default('sand'),
+  // Lightweight metadata fields for Things I Like
+  make: z.string().optional(),
+  model: z.string().optional(),
+  generation: z.string().optional(),
+  specs: z.record(z.string(), z.any()).optional(),
+  distance: z.number().optional(),
+  duration: z.string().optional(),
+  pace: z.string().optional(),
+  splits: z.array(z.string()).optional(),
+  exercises: z.array(z.object({
+    name: z.string(),
+    sets: z.number().optional(),
+    reps: z.number().optional(),
+    weight: z.number().optional(),
+    notes: z.string().optional()
+  })).optional(),
+  readingStatus: z.string().optional(),
+  sportStatus: z.string().optional(),
+  watchStatus: z.string().optional(),
+  mediaType: z.string().optional(),
+  platform: z.string().optional(),
+  goal: z.string().optional(),
+  startDate: z.coerce.date().optional(),
+  endDate: z.coerce.date().optional(),
+  progress: z.string().optional(),
   // Omitted visibility is deliberately private. `public` must be written in
   // frontmatter by the owner, so existing content never becomes public by
   // accident when the access policy changes.

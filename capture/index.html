@@ -20,7 +20,7 @@
     box-shadow: 0 0 0 4px rgba(128, 128, 128, 0.08);
   }
 </style>
-</head><body><header style="display:flex; justify-content:space-between; align-items:center;"><div><a href="#/entries" class="mark">RAJ <i>✦</i> CAPTURE</a><span>Local only · files stay yours</span></div><button type="button" id="btn-header-publish" class="primary" style="background:#059669; color:#fff; border:none; font-size:11px; padding:6px 12px; border-radius:4px; font-family:var(--mono); cursor:pointer;" title="Push changes to GitHub & deploy live on Vercel">🚀 Publish to Web</button></header><main><section id="home" class="intro"><p class="label">Your personal notebook</p><h1>What happened?</h1><p>Turn a moment into a page before it disappears. No frontmatter. No code.</p><button class="primary" data-go="capture">Capture something <b>↓</b></button></section><nav class="tabs"><button data-go="capture">Capture</button><button data-go="entries">Entries</button><button data-go="currently">Currently</button>
+</head><body><header style="display:flex; justify-content:space-between; align-items:center;"><div><a href="#/entries" class="mark">RAJ <i>✦</i> CAPTURE</a><span>Local only · files stay yours</span></div><div style="display:flex; gap:8px; align-items:center;"><a href="http://localhost:4321/studio" id="btn-header-studio" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; gap:6px; font-size:11px; padding:6px 12px; border-radius:4px; font-family:var(--mono); background:#1e293b; color:#f8fafc; border:1px solid #334155; text-decoration:none; font-weight:500; cursor:pointer;" title="Open live Raj's Corner in Owner Studio mode">Open Website Studio →</a><button type="button" id="btn-header-publish" class="primary" style="background:#059669; color:#fff; border:none; font-size:11px; padding:6px 12px; border-radius:4px; font-family:var(--mono); cursor:pointer;" title="Push changes to GitHub & deploy live on Vercel">🚀 Publish to Web</button></div></header><main><section id="home" class="intro"><p class="label">Your personal notebook</p><h1>What happened?</h1><p>Turn a moment into a page before it disappears. No frontmatter. No code.</p><button class="primary" data-go="capture">Capture something <b>↓</b></button></section><nav class="tabs"><button data-go="capture">Capture</button><button data-go="entries">Entries</button><button data-go="currently">Currently</button>
       <button data-go="rhythm">Rhythm</button><button data-go="life-list">Life list</button></nav>
 <div id="capture-workspace" style="display:flex; flex-direction:column; gap:0; align-items:stretch;">
 <section id="capture" class="panel" style="max-width: 600px; margin: 40px auto; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); display: none;">
@@ -46,6 +46,19 @@
           <option value="person">Person</option>
           <option value="car">Car</option>
           <option value="music">Music</option>
+          <option value="space">Space</option>
+          <option value="book">Book</option>
+          <option value="game">Game</option>
+          <option value="sport">Sport</option>
+          <option value="fitness">Fitness</option>
+          <option value="run">Running</option>
+          <option value="workout">Gym Workout</option>
+          <option value="challenge">Challenge</option>
+          <option value="movie">Movie</option>
+          <option value="anime">Anime</option>
+          <option value="series">Series</option>
+          <option value="technology">Technology</option>
+          <option value="obsession">Temporary Obsession</option>
           <option value="thought">Thought</option>
           <option value="idea">Idea</option>
           <option value="experiment">Experiment</option>
@@ -175,7 +188,7 @@
         <button type="button" id="delete" class="danger" hidden>Trash</button>
       </div>
       <div style="display:flex; gap:8px;">
-        <button type="button" id="btn-save-setup" class="primary" style="font-size: 14px; padding: 10px 18px;">Save</button>
+        <button type="button" id="btn-save-setup" class="primary" style="font-size: 14px; padding: 10px 18px;" title="Save entry to local Markdown without publishing">Save Locally</button>
         <button type="button" id="btn-continue-editor" class="secondary" style="font-size: 14px; padding: 10px 16px;">Continue to Editor →</button>
       </div>
     </div>
@@ -190,13 +203,14 @@
       <span id="dirty-indicator" style="color:var(--text-light);">Saved</span>
     </div>
     <div style="display:flex; gap:8px; align-items:center;">
-      <a id="btn-view-public" href="#" target="_blank" class="secondary" style="text-decoration:none; display:inline-flex; align-items:center; gap:4px; padding:5px 9px; border-radius:3px;" title="Open public entry page in a new tab">View Page ↗</a>
+      <a id="btn-studio-preview" href="http://localhost:4321/studio" target="_blank" class="secondary" style="text-decoration:none; display:inline-flex; align-items:center; gap:4px; padding:5px 9px; border-radius:3px; background:#1e293b; color:#f1f5f9; border:1px solid #334155;" title="Open and preview in Website Studio">Studio Preview ↗</a>
+      <a id="btn-view-public" href="#" target="_blank" class="secondary" style="text-decoration:none; display:inline-flex; align-items:center; gap:4px; padding:5px 9px; border-radius:3px;" title="Open public entry page in a new tab">View Public ↗</a>
       <button type="button" id="btn-add-photo-stack" class="secondary" title="Insert an interactive photo stack">+ Photo Stack</button>
       <button type="button" id="btn-settings" class="secondary">Page Settings</button>
       <button type="button" id="btn-undo" class="secondary" disabled title="Undo (Cmd/Ctrl + Z)">↩</button>
       <button type="button" id="btn-redo" class="secondary" disabled title="Redo (Cmd/Ctrl + Y)">↪</button>
-      <button type="button" id="btn-save-canvas" class="primary">Save</button>
-      <button type="button" id="btn-publish-canvas" class="primary" style="background:#059669; color:#fff; border:none; display:inline-flex; align-items:center; gap:4px;" title="Save changes and deploy live on Vercel">🚀 Publish to Web</button>
+      <button type="button" id="btn-save-canvas" class="primary" title="Save changes locally to Markdown file">Save Locally</button>
+      <button type="button" id="btn-publish-canvas" class="primary" style="background:#059669; color:#fff; border:none; display:inline-flex; align-items:center; gap:4px;" title="Commit changes and push live to GitHub/Vercel">🚀 Publish to Web</button>
     </div>
   </div>
   

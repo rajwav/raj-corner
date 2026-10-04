@@ -8,3 +8,5 @@ reference/
 .env
 .env.*
 .data/
+.vercel
+.env*

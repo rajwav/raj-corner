@@ -32,6 +32,16 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   }
 
+  // Protect Studio routes — owner-only.
+  if (url.pathname === '/studio' || url.pathname.startsWith('/studio/')) {
+    if (!session) {
+      return context.redirect(`/login?redirect=${encodeURIComponent(url.pathname)}`);
+    }
+    if (!isOwnerSession(session)) {
+      return new Response('Forbidden: Studio mode is restricted to the site owner.', { status: 403 });
+    }
+  }
+
   // These pages contain aggregate private metadata (timeline, locations,
   // habits, etc.). Do this at the server boundary so an overlooked template
   // cannot accidentally leak it. Entry, world, and archive pages render their

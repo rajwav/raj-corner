@@ -4,9 +4,10 @@ const $ = (selector) => document.querySelector(selector);
 const typeWorld = {
   memory:'life', person:'life', milestone:'life', dream:'life', goal:'life', note:'life',
   travel:'travel', trip:'travel', place:'travel', photo:'travel',
-  car:'interests', music:'interests', book:'interests', movie:'interests', anime:'interests', space:'interests', chess:'interests', collection:'interests',
+  car:'interests', music:'interests', book:'interests', movie:'interests', anime:'interests', series:'interests', space:'interests', chess:'interests', game:'interests', sport:'interests', fitness:'interests', run:'interests', workout:'interests', challenge:'interests', technology:'interests', obsession:'interests', collection:'interests',
   experiment:'making', project:'making', idea:'making', thought:'making',
 };
+
 
 window.goToSetup = async function() {
   if (window.USE_BLOCKNOTE_POC && window.BlockNotePOCModule) {
@@ -101,18 +102,22 @@ let entries=[];
 
 // The hash is the only navigation source of truth. Keeping this router small
 // prevents an old button handler or a partial editor mount from stranding the UI.
+let isRouting = false;
 async function route() {
-  const hash = location.hash.slice(1) || '/';
+  if (isRouting) return;
+  isRouting = true;
+  const rawHash = (location.hash.startsWith('#') ? location.hash.slice(1) : location.hash) || '/';
+  const cleanHash = rawHash.replace(/\/+$/, '') || '/';
   const form = document.getElementById('entry-form');
   try {
-    if (hash === '/setup/new') {
+    if (cleanHash === '/setup/new') {
       if (form.elements.existingId.value !== '' || !activeType) {
         initializeNewEntry('memory');
       }
       show('capture');
       return;
     }
-    if (hash === '/editor/new') {
+    if (cleanHash === '/editor/new') {
       if (form.elements.existingId.value !== '' || !activeType) {
         initializeNewEntry('memory');
       }
@@ -120,26 +125,31 @@ async function route() {
       updatePreview();
       return;
     }
-    const match = hash.match(/^\/(setup|editor)\/([^/]+)$/);
+    const match = cleanHash.match(/^\/(setup|editor)\/(.+)$/);
     if (match) {
-      const [, mode, id] = match;
-      if (form.elements.existingId.value !== id) await editEntry(id, mode);
-      else {
-        show(mode === 'editor' ? 'preview-pane' : 'capture');
-        if (mode === 'editor') updatePreview();
+      const [, mode, rawId] = match;
+      const id = decodeURIComponent(rawId).replace(/\/+$/, '');
+      if (form.elements.existingId.value !== id) {
+        await editEntry(id, mode);
+      }
+      show(mode === 'editor' ? 'preview-pane' : 'capture');
+      if (mode === 'editor') {
+        updatePreview();
       }
       return;
     }
-    if (hash === '/entries') return show('entries');
-    if (hash === '/currently') return show('currently');
-    if (hash === '/life-list') return show('life-list');
-    if (hash === '/rhythm') { loadRhythm(); return show('rhythm'); }
+    if (cleanHash === '/entries') return show('entries');
+    if (cleanHash === '/currently') return show('currently');
+    if (cleanHash === '/life-list') return show('life-list');
+    if (cleanHash === '/rhythm') { loadRhythm(); return show('rhythm'); }
     show('home');
   } catch (error) {
     console.error('Capture route failed:', error);
     const message = document.getElementById('message');
     if (message) message.textContent = `Could not open this page: ${error.message}`;
     show('home');
+  } finally {
+    isRouting = false;
   }
 }
 window.onhashchange = route;
@@ -965,15 +975,27 @@ async function saveCurrentEntry() {
     
     if (typeof window.setDirty === 'function') window.setDirty(false);
     if (indicator) { 
-      indicator.textContent = '✓ Saved just now'; 
+      indicator.innerHTML = `✓ Saved locally · <a href="http://localhost:4321/entry/${encodeURIComponent(res.id)}?studio=1" target="_blank" rel="noopener" style="color:var(--text); text-decoration:underline;">Preview in Studio ↗</a>`; 
       indicator.style.color = 'var(--text-light)'; 
     }
-    if (message) message.textContent = 'Saved. It is now part of your archive.';
+    if (message) {
+      message.innerHTML = `Saved locally. <a href="http://localhost:4321/entry/${encodeURIComponent(res.id)}?studio=1" target="_blank" rel="noopener" style="font-weight:600; text-decoration:underline;">Return to Website Studio ↗</a>`;
+    }
     if (typeof loadEntries === 'function') await loadEntries();
     
     const form = document.getElementById('entry-form');
     if (form && form.elements.existingId) {
       form.elements.existingId.value = res.id;
+    }
+    
+    const btnStudio = document.getElementById('btn-studio-preview');
+    if (btnStudio && res.id) {
+      btnStudio.href = `http://localhost:4321/entry/${encodeURIComponent(res.id)}?studio=1`;
+    }
+    const btnPub = document.getElementById('btn-view-public');
+    if (btnPub && res.id) {
+      btnPub.href = `/entry/${res.id}/`;
+      btnPub.style.display = 'inline-flex';
     }
     
     const deleteBtn = document.getElementById('delete');
@@ -1284,12 +1306,16 @@ function updatePreview() {
     initPhotoStacks(previewContent);
   }
   
-  // Update View Page button link in toolbar
+  // Update View Page & Studio Preview button links in toolbar
+  const curId = entryForm?.elements?.existingId?.value || '';
   const btnViewPublic = document.getElementById('btn-view-public');
   if (btnViewPublic) {
-    const curId = entryForm?.elements?.existingId?.value || '';
     btnViewPublic.href = curId ? `/entry/${curId}/` : '#';
     btnViewPublic.style.display = curId ? 'inline-flex' : 'none';
+  }
+  const btnStudioPreview = document.getElementById('btn-studio-preview');
+  if (btnStudioPreview) {
+    btnStudioPreview.href = curId ? `http://localhost:4321/entry/${encodeURIComponent(curId)}?studio=1` : 'http://localhost:4321/studio';
   }
 
   // PHASE 8H.5: INIT CANVAS EDITOR
@@ -2970,13 +2996,20 @@ window.parseMarkdownToBlocks = parseMarkdownToBlocks;
 window.updateStoryFromBlocks = updateStoryFromBlocks;
 window.updatePreview = updatePreview;
 
-window.addEventListener('load', () => {
-  if (location.hash) {
-    window.onhashchange();
+function initRoute() {
+  const hash = location.hash;
+  if (hash && hash !== '#' && hash !== '#/' && hash !== '#/home') {
+    route();
   } else {
     show('home');
   }
-});
+}
+
+window.addEventListener('DOMContentLoaded', initRoute);
+window.addEventListener('load', initRoute);
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  initRoute();
+}
 
 // Intercept public links inside editor
 document.getElementById('preview-content')?.addEventListener('click', (e) => {

@@ -6,6 +6,13 @@ import EntryList from '../../components/EntryList.astro';
 import AccessGate from '../../components/AccessGate.astro';
 import { entries, worlds, entryWorld, niceDate, placeSlug } from '../../lib/universe';
 import { evaluateAccess, filterVisibleEntries, PUBLIC_WORLD_SLUGS } from '../../lib/access-control/policy';
+import { buildLifeSections } from '../../lib/people';
+import {
+  INTEREST_CATEGORIES,
+  buildInterestRooms,
+  calculateRunningPersonalBests,
+  calculateGymRecords
+} from '../../lib/interests';
 
 const { world } = Astro.params;
 const definition = worlds.find(([slug])=>slug===world);
@@ -36,16 +43,16 @@ const visibleEntryIds = new Set(visibleEntries.map(e => e.id));
 const found = isPublicWorld && pageAccess.allowed ? rawFound : visibleEntries;
 
 
-// Sort for Travel and Life
+// Sort for Travel
 const sortedEntries = found.slice().sort((a, b) => {
   if (!a.data.date) return 1;
   if (!b.data.date) return -1;
   return b.data.date.getTime() - a.data.date.getTime();
 });
 
-// Group by year for Life
-const lifeEras = Object.groupBy(sortedEntries, x => x.data.date?.getFullYear() ?? 'Timeless');
-const lifeYears = Object.entries(lifeEras).sort(([a], [b]) => b.localeCompare(a));
+// Life world sections: Chronology (years), People (independent of dates), Timeless
+const lifeSections = world === 'life' ? buildLifeSections(found, allEntries) : null;
+
 
 // Groups for Making
 const mkCurrent = found.filter(e => ['now', 'building', 'learning'].includes((e.data as any).status));
@@ -53,9 +60,12 @@ const mkExperiments = found.filter(e => e.data.type === 'experiment' && !mkCurre
 const mkIdeas = found.filter(e => (e.data.type === 'idea' || e.data.type === 'note' || e.data.type === 'thought' || e.data.type === 'goal') && !mkCurrent.includes(e));
 const mkOther = found.filter(e => !mkCurrent.includes(e) && !mkExperiments.includes(e) && !mkIdeas.includes(e));
 
-// Groups for Interests
-const musicEntries = found.filter(e => e.data.type === 'music').sort((a, b) => Number(b.data.date ?? 0) - Number(a.data.date ?? 0));
-const otherInterests = found.filter(e => e.data.type !== 'music');
+// Groups for Interests (Cabinet of Curiosities)
+const interestRooms = world === 'interests' ? buildInterestRooms(found) : [];
+const runEntries = world === 'interests' ? found.filter(e => e.data.type === 'run' || (e.data as any).subcategory === 'running' || (e.data as any).distance) : [];
+const gymEntries = world === 'interests' ? found.filter(e => e.data.type === 'workout' || (e.data as any).subcategory === 'gym' || (e.data as any).exercises) : [];
+const runningPBs = world === 'interests' ? calculateRunningPersonalBests(runEntries) : null;
+const gymRecords = world === 'interests' ? calculateGymRecords(gymEntries) : [];
 ---
 <Base title={pageAccess.allowed ? `${definition[1]} · Raj's Corner` : `${definition[1]} (Protected) · Raj's Corner`}>
   {!pageAccess.allowed ? (
@@ -131,7 +141,7 @@ const otherInterests = found.filter(e => e.data.type !== 'music');
         </div>
       </footer>
     </article>
-  ) : world === 'life' ? (
+  ) : world === 'life' && lifeSections ? (
     <article class="life-world-container">
       <header class="life-header">
         <span class="life-label">A life in fragments</span>
@@ -140,12 +150,13 @@ const otherInterests = found.filter(e => e.data.type !== 'music');
         <p class="life-count">{found.length} {found.length === 1 ? 'fragment' : 'fragments'} kept so far.</p>
       </header>
 
-      <section class="life-eras">
-        {lifeYears.map(([year, items]) => (
+      {/* 1. CHRONOLOGY: 2026, 2025, ... (people are NOT assigned to years) */}
+      <section class="life-chronology">
+        {lifeSections.years.map(({ year, entries: items }) => (
           <div class="life-era-block">
             <h2 class="life-era-marker">{year}</h2>
             <div class="life-fragments">
-              {items?.map(entry => {
+              {items.map(entry => {
                 const isAccessible = visibleEntryIds.has(entry.id);
                 const isAbsPrivate = entry.data.visibility === 'absolute_private';
 
@@ -165,14 +176,12 @@ const otherInterests = found.filter(e => e.data.type !== 'music');
 
                 const isPhoto = entry.data.type === 'photo';
                 const isMilestone = entry.data.type === 'milestone';
-                const isPerson = entry.data.type === 'person';
                 const isMemory = entry.data.type === 'memory';
                 const isThought = entry.data.type === 'note' || entry.data.type === 'idea';
                 
                 let fragType = 'ordinary';
                 if (isPhoto) fragType = 'photo';
                 else if (isMilestone) fragType = 'milestone';
-                else if (isPerson) fragType = 'person';
                 else if (isMemory) fragType = 'memory';
                 else if (isThought) fragType = 'thought';
 
@@ -217,7 +226,7 @@ const otherInterests = found.filter(e => e.data.type !== 'music');
                         )}
                         
                         <a href={`/entry/${entry.id}/`} class="frag-read-more">
-                          {isPerson ? 'Read about them →' : 'Read fragment →'}
+                          Read fragment →
                         </a>
                       </div>
                     )}
@@ -229,9 +238,128 @@ const otherInterests = found.filter(e => e.data.type !== 'music');
         ))}
       </section>
 
+      {/* 2. PEOPLE: Separate section independent of years */}
+      <section class="life-era-block life-people-block">
+        <h2 class="life-era-marker">People</h2>
+        <div class="life-people-list">
+          {lifeSections.people.map(({ person, events }) => {
+            const isPersonAccessible = visibleEntryIds.has(person.id);
+            const isPersonAbsPrivate = person.data.visibility === 'absolute_private';
+
+            return (
+              <div class="person-node">
+                <div class="person-main">
+                  {!isPersonAccessible ? (
+                    <div class="person-locked-card">
+                      <a href={`/entry/${person.id}/`} class="locked-entry-link" aria-label={`Private person: ${person.data.title}`}>
+                        <div class="locked-entry-inner">
+                          <span class="locked-icon" aria-hidden="true">🔒</span>
+                          <span class="locked-title">{person.data.title}</span>
+                          <span class="locked-badge">{isPersonAbsPrivate ? 'Owner only' : 'Private'}</span>
+                        </div>
+                      </a>
+                    </div>
+                  ) : (
+                    <div class="person-card">
+                      <a href={`/entry/${person.id}/`} class="person-name-link">
+                        <h3 class="person-name">{person.data.title}</h3>
+                      </a>
+                      {person.data.location && (
+                        <span class="person-location">{person.data.location}</span>
+                      )}
+                      <a href={`/entry/${person.id}/`} class="person-arrow" aria-label={`View ${person.data.title}`}>
+                        Enter profile →
+                      </a>
+                    </div>
+                  )}
+                </div>
+
+                {events.length > 0 && (
+                  <div class="person-events-branch">
+                    <ul class="person-events-list">
+                      {events.map(event => {
+                        const isEventAccessible = visibleEntryIds.has(event.id);
+                        const isEventAbsPrivate = event.data.visibility === 'absolute_private';
+
+                        return (
+                          <li class="person-event-item">
+                            {!isEventAccessible ? (
+                              <a href={`/entry/${event.id}/`} class="locked-entry-link" aria-label={`Private event: ${event.data.title}`}>
+                                <div class="locked-entry-inner">
+                                  <span class="locked-icon" aria-hidden="true">🔒</span>
+                                  <span class="locked-title">{event.data.title}</span>
+                                  <span class="locked-badge">{isEventAbsPrivate ? 'Owner only' : 'Private'}</span>
+                                </div>
+                              </a>
+                            ) : (
+                              <a href={`/entry/${event.id}/`} class="person-event-link">
+                                <span class="event-title">{event.data.title}</span>
+                                <span class="event-arrow">→</span>
+                              </a>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* 3. TIMELESS: Genuinely undated life entries (excluding people) */}
+      {lifeSections.timeless.length > 0 && (
+        <section class="life-era-block life-timeless-block">
+          <h2 class="life-era-marker">Timeless</h2>
+          <div class="life-fragments">
+            {lifeSections.timeless.map(entry => {
+              const isAccessible = visibleEntryIds.has(entry.id);
+              const isAbsPrivate = entry.data.visibility === 'absolute_private';
+
+              if (!isAccessible) {
+                return (
+                  <article class="life-fragment frag-locked">
+                    <a href={`/entry/${entry.id}/`} class="locked-entry-link" aria-label={`Private entry: ${entry.data.title}`}>
+                      <div class="locked-entry-inner">
+                        <span class="locked-icon" aria-hidden="true">🔒</span>
+                        <span class="locked-title">{entry.data.title}</span>
+                        <span class="locked-badge">{isAbsPrivate ? 'Owner only' : 'Private'}</span>
+                      </div>
+                    </a>
+                  </article>
+                );
+              }
+
+              return (
+                <article class="life-fragment frag-ordinary">
+                  <div class="frag-content-wrapper">
+                    <div class="frag-meta">
+                      <span class="f-type">{entry.data.type}</span>
+                      {entry.data.location && (
+                        <a href={`/places/${placeSlug(entry.data.location)}/`} class="f-location">
+                          {entry.data.location}
+                        </a>
+                      )}
+                    </div>
+                    <a href={`/entry/${entry.id}/`} class="frag-title-link">
+                      <h3 class="f-title">{entry.data.title}</h3>
+                    </a>
+                    {entry.data.description && <p class="f-desc">{entry.data.description}</p>}
+                    <a href={`/entry/${entry.id}/`} class="frag-read-more">Read fragment →</a>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       <footer class="life-footer">
         <p class="life-footer-label">Keep looking around</p>
         <div class="life-links">
+          <a href="/people/">People</a>
           <a href="/timeline/">Timeline</a>
           <a href="/places/">Atlas</a>
           <a href="/currently/">Currently</a>
@@ -244,114 +372,962 @@ const otherInterests = found.filter(e => e.data.type !== 'music');
   ) : world === 'interests' ? (
     <article class="interests-world-container">
       <header class="interests-header">
-        <span class="interests-label">A cabinet of curiosities</span>
-        <h1 class="interests-title">Interests</h1>
-        <p class="interests-lede">Things I keep coming back to. The fascinations that occupy a curious mind.</p>
-        <p class="interests-count">{found.length} {found.length === 1 ? 'thread' : 'threads'} to follow.</p>
+        <div class="interests-curator-badge">
+          <span class="curator-wing-no">WING IV</span>
+          <span class="curator-sep">·</span>
+          <span class="interests-label">A Cabinet of Curiosities</span>
+        </div>
+        <h1 class="interests-title">Things I Like</h1>
+        <p class="interests-lede">These are some of the things that fascinate me, entertain me, make me curious, or become temporary obsessions.</p>
+        
+        <nav class="curiosities-nav" aria-label="Curiosity rooms directory">
+          <div class="curiosities-nav-label">GALLERY DIRECTORY</div>
+          <div class="curiosities-nav-pills">
+            {INTEREST_CATEGORIES.map((cat, idx) => (
+              <a href={`#${cat.id}`} class="curiosity-nav-pill">
+                <span class="nav-room-num">{String(idx + 1).padStart(2, '0')}</span>
+                <span class="nav-room-name">{cat.name}</span>
+              </a>
+            ))}
+          </div>
+        </nav>
       </header>
 
-      {musicEntries.length > 0 && (
-        <section class="interests-music-section">
-          <div class="music-section-header">
-            <span class="music-section-label">Listening Collection</span>
-            <h2 class="music-section-title">Music</h2>
-            <p class="music-section-lede">Records and tracks attached to places, evenings, and memory.</p>
-          </div>
+      <div class="curiosities-cabinet">
+        {interestRooms.map(room => {
+          const { category, entries: rEntries } = room;
+          const catId = category.id;
+          const roomIndex = INTEREST_CATEGORIES.findIndex(c => c.id === catId) + 1;
+          const roomNumStr = String(roomIndex).padStart(2, '0');
 
-          <div class="music-records-shelf">
-            {musicEntries.map((entry, index) => {
-              const numStr = String(index + 1).padStart(2, '0');
-              const isAccessible = visibleEntryIds.has(entry.id);
-              const isAbsPrivate = entry.data.visibility === 'absolute_private';
-              if (!isAccessible) {
-                return (
-                  <a href={`/entry/${entry.id}/`} class="record-row-item locked-entry-link" aria-label={`Private: ${entry.data.title}`}>
-                    <span class="record-index">{numStr}</span>
-                    <div class="record-thumb-frame">
-                      <div class="record-thumb-vinyl" aria-hidden="true"><div class="record-vinyl-groove"></div></div>
+          return (
+            <section id={catId} class={`curiosity-room curiosity-room-${catId}`}>
+              <div class="room-header">
+                <div class="room-meta-tag">
+                  <span class="room-num">ROOM {roomNumStr}</span>
+                  <span class="room-badge">{category.badge}</span>
+                </div>
+                <h2 class="room-title">{category.name}</h2>
+                <p class="room-desc">{category.shortDesc}</p>
+              </div>
+
+              {/* ROOM 1: MUSIC — Private Listening Room */}
+              {catId === 'music' && (
+                <div class="music-listening-room">
+                  <div class="turntable-bench">
+                    <div class="vinyl-crate-header">
+                      <span class="vinyl-crate-tag">VINYL RECORD SHELF · 33⅓ RPM</span>
+                      <span class="vinyl-crate-count">{rEntries.length} TITLES FILED</span>
                     </div>
-                    <div class="record-main-info">
-                      <span class="record-title">{entry.data.title}</span>
-                      <span class="locked-badge">{isAbsPrivate ? 'Owner only' : '🔒 Private'}</span>
+                    <div class="music-records-shelf">
+                      {rEntries.map((entry, index) => {
+                        const numStr = String(index + 1).padStart(2, '0');
+                        const isAccessible = visibleEntryIds.has(entry.id);
+                        const isAbsPrivate = entry.data.visibility === 'absolute_private';
+                        if (!isAccessible) {
+                          return (
+                            <a href={`/entry/${entry.id}/`} class="record-row-item locked-entry-link" aria-label={`Private: ${entry.data.title}`}>
+                              <span class="record-index">{numStr}</span>
+                              <div class="record-thumb-frame">
+                                <div class="record-thumb-vinyl" aria-hidden="true"><div class="record-vinyl-groove"></div></div>
+                              </div>
+                              <div class="record-main-info">
+                                <span class="record-title">{entry.data.title}</span>
+                                <span class="locked-badge">{isAbsPrivate ? 'Owner only' : '🔒 Private'}</span>
+                              </div>
+                            </a>
+                          );
+                        }
+                        const artistName = (entry.data as any).artist || 'Curated Sound';
+                        return (
+                          <a href={`/entry/${entry.id}/`} class="record-row-item">
+                            <span class="record-index">{numStr}</span>
+                            <div class="record-thumb-frame">
+                              {entry.data.cover ? (
+                                <img src={entry.data.cover} alt={entry.data.title} class="record-thumb-img" loading="lazy" />
+                              ) : (
+                                <div class="record-thumb-jacket">
+                                  <span class="jacket-corner-tag">EP</span>
+                                  <span class="jacket-short-title">{entry.data.title.substring(0, 14)}</span>
+                                </div>
+                              )}
+                              <div class="record-thumb-vinyl" aria-hidden="true">
+                                <div class="record-vinyl-groove"></div>
+                                <div class="record-vinyl-center"></div>
+                              </div>
+                            </div>
+                            <div class="record-main-info">
+                              <span class="record-title">{entry.data.title}</span>
+                              <span class="record-artist">{artistName}</span>
+                              {entry.data.description && <p class="record-desc">{entry.data.description}</p>}
+                            </div>
+                            <div class="record-status-strip">
+                              <div class="analogue-wave-bars" aria-hidden="true">
+                                <span class="aw-bar b-1"></span>
+                                <span class="aw-bar b-2"></span>
+                                <span class="aw-bar b-3"></span>
+                                <span class="aw-bar b-4"></span>
+                              </div>
+                              <span class="record-arrow">Listen →</span>
+                            </div>
+                          </a>
+                        );
+                      })}
                     </div>
-                  </a>
-                );
-              }
-              const artistName = (entry.data as any).artist || '';
-              return (
-                <a href={`/entry/${entry.id}/`} class="record-row-item">
-                  <span class="record-index">{numStr}</span>
-                  <div class="record-thumb-frame">
-                    {entry.data.cover ? (
-                      <img src={entry.data.cover} alt={entry.data.title} class="record-thumb-img" loading="lazy" />
+                  </div>
+                </div>
+              )}
+
+              {/* ROOM 2: CARS — Quiet Private Garage at Night */}
+              {catId === 'cars' && (
+                <div class="garage-bay-room">
+                  <div class="garage-overhead-beam" aria-hidden="true"></div>
+                  <div class="garage-bay-grid">
+                    {rEntries.map(entry => {
+                      const isAccessible = visibleEntryIds.has(entry.id);
+                      const isAbsPrivate = entry.data.visibility === 'absolute_private';
+                      if (!isAccessible) {
+                        return (
+                          <div class="car-card locked-entry">
+                            <a href={`/entry/${entry.id}/`} class="locked-entry-link">
+                              <div class="locked-entry-inner">
+                                <span class="locked-icon" aria-hidden="true">🔒</span>
+                                <span class="locked-title">{entry.data.title}</span>
+                                <span class="locked-badge">{isAbsPrivate ? 'Owner only' : 'Private'}</span>
+                              </div>
+                            </a>
+                          </div>
+                        );
+                      }
+                      const specs = (entry.data as any).specs || {};
+                      const make = (entry.data as any).make || 'MACHINE';
+                      const model = (entry.data as any).model || entry.data.title;
+                      const is911 = entry.id.includes('911') || entry.data.title.includes('911');
+                      const isGhost = entry.id.includes('ghost') || entry.data.title.includes('Ghost');
+                      const isM5 = entry.id.includes('m5') || entry.data.title.includes('M5');
+
+                      return (
+                        <article class="garage-machine-card">
+                          <div class="machine-bay-header">
+                            <div class="machine-identity">
+                              <span class="machine-make">{make}</span>
+                              <h3 class="car-title">
+                                <a href={`/entry/${entry.id}/`}>{entry.data.title}</a>
+                              </h3>
+                            </div>
+                            <span class="machine-bay-tag">BAY · {model.toUpperCase()}</span>
+                          </div>
+
+                          <div class="machine-blueprint-viewport">
+                            <div class="blueprint-grid-lines" aria-hidden="true"></div>
+                            {is911 && (
+                              <svg class="car-silhouette-svg porsche-svg" viewBox="0 0 420 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Porsche 911 Silhouette">
+                                <path d="M 30,85 C 40,85 55,85 70,85 C 80,68 95,60 115,60 C 135,60 150,68 158,85 C 220,85 270,85 285,85 C 295,68 310,60 330,60 C 350,60 365,68 375,85 C 395,85 405,82 408,75 C 410,65 400,55 385,50 C 350,42 320,38 275,25 C 235,14 185,14 140,28 C 95,42 60,55 45,65 C 32,74 25,82 30,85 Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                                <path d="M 140,28 C 175,22 225,22 265,30 C 275,32 295,40 310,50 L 220,50 C 175,50 148,45 140,28 Z" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.6" />
+                                <circle cx="115" cy="85" r="22" stroke="currentColor" stroke-width="1.8" />
+                                <circle cx="115" cy="85" r="10" stroke="currentColor" stroke-width="1.2" />
+                                <circle cx="330" cy="85" r="22" stroke="currentColor" stroke-width="1.8" />
+                                <circle cx="330" cy="85" r="10" stroke="currentColor" stroke-width="1.2" />
+                                <line x1="10" y1="107" x2="410" y2="107" stroke="currentColor" stroke-width="0.8" opacity="0.4" />
+                              </svg>
+                            )}
+                            {isGhost && (
+                              <svg class="car-silhouette-svg ghost-svg" viewBox="0 0 420 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Rolls-Royce Ghost Silhouette">
+                                <path d="M 25,85 C 35,85 55,85 70,85 C 80,68 95,60 115,60 C 135,60 150,68 160,85 C 220,85 275,85 295,85 C 305,68 320,60 340,60 C 360,60 375,68 385,85 C 400,85 410,80 412,70 C 412,50 405,45 370,42 C 340,40 310,32 280,26 C 240,20 170,20 110,24 C 65,27 45,35 35,45 C 28,52 24,70 25,85 Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                                <path d="M 120,26 L 120,50 L 260,50 L 275,30" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.6" />
+                                <circle cx="115" cy="85" r="22" stroke="currentColor" stroke-width="1.8" />
+                                <circle cx="115" cy="85" r="10" stroke="currentColor" stroke-width="1.2" />
+                                <circle cx="340" cy="85" r="22" stroke="currentColor" stroke-width="1.8" />
+                                <circle cx="340" cy="85" r="10" stroke="currentColor" stroke-width="1.2" />
+                                <line x1="10" y1="107" x2="410" y2="107" stroke="currentColor" stroke-width="0.8" opacity="0.4" />
+                              </svg>
+                            )}
+                            {isM5 && (
+                              <svg class="car-silhouette-svg m5-svg" viewBox="0 0 420 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="BMW M5 Silhouette">
+                                <path d="M 28,85 C 40,85 55,85 70,85 C 80,68 95,60 115,60 C 135,60 150,68 160,85 C 220,85 270,85 288,85 C 298,68 312,60 332,60 C 352,60 366,68 376,85 C 395,85 408,82 410,72 C 410,58 395,48 375,44 C 345,38 315,30 270,22 C 225,16 160,18 120,26 C 85,34 50,48 38,60 C 26,72 26,80 28,85 Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                                <path d="M 130,26 L 200,26 L 270,30 L 285,46 L 190,46 Z" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.6" />
+                                <circle cx="115" cy="85" r="22" stroke="currentColor" stroke-width="1.8" />
+                                <circle cx="115" cy="85" r="10" stroke="currentColor" stroke-width="1.2" />
+                                <circle cx="332" cy="85" r="22" stroke="currentColor" stroke-width="1.8" />
+                                <circle cx="332" cy="85" r="10" stroke="currentColor" stroke-width="1.2" />
+                                <line x1="10" y1="107" x2="410" y2="107" stroke="currentColor" stroke-width="0.8" opacity="0.4" />
+                              </svg>
+                            )}
+                          </div>
+
+                          {specs && Object.keys(specs).length > 0 && (
+                            <div class="chassis-spec-plate">
+                              <span class="rivet r-tl"></span>
+                              <span class="rivet r-tr"></span>
+                              <span class="rivet r-bl"></span>
+                              <span class="rivet r-br"></span>
+                              <div class="plate-top-bar">
+                                <span class="plate-label">CHASSIS SPECIFICATION</span>
+                                <span class="plate-series">VIN-RC-{entry.id.substring(0, 4).toUpperCase()}</span>
+                              </div>
+                              <div class="plate-grid">
+                                {Object.entries(specs).map(([key, val]) => (
+                                  <div class="plate-field">
+                                    <span class="field-k">{key}</span>
+                                    <span class="field-v">{val}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {entry.data.description && (
+                            <p class="car-desc">{entry.data.description}</p>
+                          )}
+
+                          <div class="machine-card-footer">
+                            <a href={`/entry/${entry.id}/`} class="garage-inspect-btn">
+                              <span class="inspect-txt">Examine machine</span>
+                              <span class="inspect-arrow">→</span>
+                            </a>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* ROOM 3: SPACE — The Personal Observatory */}
+              {catId === 'space' && (
+                <div class="observatory-room">
+                  <div class="starfield-layer stars-deep" aria-hidden="true"></div>
+                  <div class="starfield-layer stars-mid" aria-hidden="true"></div>
+
+                  <div class="observatory-notebook-intro">
+                    <div class="reticle-corner tl">+</div>
+                    <div class="reticle-corner tr">+</div>
+                    <div class="reticle-corner bl">+</div>
+                    <div class="reticle-corner br">+</div>
+                    <div class="observatory-coordinates">
+                      <span>OBSERVATORY POINT</span>
+                      <span>RA 18h 36m 56s · DEC +38° 47′ 01″</span>
+                      <span>DEEP COSMIC SCALE</span>
+                    </div>
+                    <p class="space-quote-text">
+                      “The universe is probably the most ridiculous thing I’m interested in. The physics at the extremes — horizon crossings, relativistic time dilation, and worlds orbiting dead stars — reminds us how narrow our everyday intuition really is.”
+                    </p>
+                  </div>
+
+                  <div class="space-grid">
+                    {rEntries.map(entry => {
+                      const isAccessible = visibleEntryIds.has(entry.id);
+                      const isAbsPrivate = entry.data.visibility === 'absolute_private';
+                      if (!isAccessible) {
+                        return (
+                          <div class="space-card locked-entry">
+                            <a href={`/entry/${entry.id}/`} class="locked-entry-link">
+                              <div class="locked-entry-inner">
+                                <span class="locked-icon" aria-hidden="true">🔒</span>
+                                <span class="locked-title">{entry.data.title}</span>
+                                <span class="locked-badge">{isAbsPrivate ? 'Owner only' : 'Private'}</span>
+                              </div>
+                            </a>
+                          </div>
+                        );
+                      }
+                      const isAstrophysics = entry.id.includes('astrophysics');
+                      const isRelativity = entry.id.includes('relativity') || entry.id.includes('time');
+                      const isExoplanets = entry.id.includes('exoplanet');
+
+                      return (
+                        <article class="observatory-concept-card space-card">
+                          <div class="concept-celestial-reticle">
+                            {isAstrophysics && (
+                              <svg class="celestial-orbit-svg" viewBox="0 0 160 160" fill="none" aria-hidden="true">
+                                <circle cx="80" cy="80" r="58" stroke="rgba(255,255,255,0.2)" stroke-dasharray="2 4" />
+                                <ellipse cx="80" cy="80" rx="68" ry="24" stroke="rgba(255,255,255,0.35)" transform="rotate(-25 80 80)" />
+                                <ellipse cx="80" cy="80" rx="68" ry="24" stroke="rgba(255,255,255,0.2)" transform="rotate(40 80 80)" />
+                                <circle cx="80" cy="80" r="5" fill="#fcfbf9" />
+                                <circle cx="132" cy="55" r="2.5" fill="#a5b4fc" class="orbiting-node" />
+                              </svg>
+                            )}
+                            {isRelativity && (
+                              <svg class="celestial-orbit-svg" viewBox="0 0 160 160" fill="none" aria-hidden="true">
+                                <line x1="80" y1="10" x2="80" y2="150" stroke="rgba(255,255,255,0.25)" stroke-dasharray="3 3" />
+                                <line x1="10" y1="80" x2="150" y2="80" stroke="rgba(255,255,255,0.25)" stroke-dasharray="3 3" />
+                                <path d="M 25,25 L 80,80 L 135,25" stroke="rgba(255,255,255,0.4)" stroke-width="1.2" />
+                                <path d="M 25,135 L 80,80 L 135,135" stroke="rgba(255,255,255,0.4)" stroke-width="1.2" />
+                                <ellipse cx="80" cy="25" rx="55" ry="12" stroke="rgba(255,255,255,0.25)" />
+                                <ellipse cx="80" cy="135" rx="55" ry="12" stroke="rgba(255,255,255,0.25)" />
+                                <circle cx="80" cy="80" r="3" fill="#fcfbf9" />
+                              </svg>
+                            )}
+                            {isExoplanets && (
+                              <svg class="celestial-orbit-svg" viewBox="0 0 160 160" fill="none" aria-hidden="true">
+                                <circle cx="80" cy="80" r="36" stroke="rgba(255,255,255,0.3)" />
+                                <circle cx="80" cy="80" r="36" fill="rgba(255,255,255,0.04)" />
+                                <ellipse cx="80" cy="80" rx="70" ry="16" stroke="rgba(255,255,255,0.3)" stroke-dasharray="3 3" transform="rotate(-15 80 80)" />
+                                <circle cx="62" cy="74" r="6" fill="#06080c" stroke="#fcfbf9" stroke-width="1.2" />
+                                <line x1="20" y1="130" x2="140" y2="130" stroke="rgba(255,255,255,0.2)" />
+                                <polyline points="20,130 55,130 65,142 75,142 85,130 140,130" stroke="#818cf8" stroke-width="1.2" fill="none" />
+                              </svg>
+                            )}
+                          </div>
+
+                          <div class="concept-meta-strip">
+                            <span class="space-tag">{(entry.data as any).subcategory || 'Cosmic Extreme'}</span>
+                            {entry.data.date && <span class="space-date">{niceDate(entry.data.date)}</span>}
+                          </div>
+
+                          <h3 class="space-title">
+                            <a href={`/entry/${entry.id}/`}>{entry.data.title}</a>
+                          </h3>
+
+                          {entry.data.description && <p class="space-desc">{entry.data.description}</p>}
+
+                          <div class="space-card-footer">
+                            <a href={`/entry/${entry.id}/`} class="observatory-deep-link room-card-arrow">
+                              <span>Read contemplation</span>
+                              <span class="deep-link-arrow">→</span>
+                            </a>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* ROOM 4: BOOKS — The Personal Study */}
+              {catId === 'books' && (
+                <div class="study-room">
+                  <div class="study-shelf-header">
+                    <span class="study-shelf-tag">PERSONAL STUDY · BOUND VOLUMES</span>
+                    <span class="study-shelf-count">{rEntries.length} VOLUMES ON SHELF</span>
+                  </div>
+
+                  <div class="books-grid">
+                    {rEntries.map(entry => {
+                      const isAccessible = visibleEntryIds.has(entry.id);
+                      const isAbsPrivate = entry.data.visibility === 'absolute_private';
+                      if (!isAccessible) {
+                        return (
+                          <div class="book-card locked-entry">
+                            <a href={`/entry/${entry.id}/`} class="locked-entry-link">
+                              <div class="locked-entry-inner">
+                                <span class="locked-icon" aria-hidden="true">🔒</span>
+                                <span class="locked-title">{entry.data.title}</span>
+                                <span class="locked-badge">{isAbsPrivate ? 'Owner only' : 'Private'}</span>
+                              </div>
+                            </a>
+                          </div>
+                        );
+                      }
+                      const readingStatus = (entry.data as any).readingStatus || 'Foundation';
+                      const author = (entry.data as any).artist || (entry.data as any).author || 'Core Text';
+                      return (
+                        <article class="study-volume-card book-card">
+                          <div class="volume-bookmark-ribbon" aria-hidden="true"></div>
+                          <div class="volume-spine-edge" aria-hidden="true"></div>
+                          <div class="volume-content">
+                            <div class="volume-header">
+                              <span class="book-status-pill">{readingStatus}</span>
+                              <span class="volume-author">{author}</span>
+                            </div>
+                            <h3 class="book-title">
+                              <a href={`/entry/${entry.id}/`}>{entry.data.title}</a>
+                            </h3>
+                            {entry.data.description && (
+                              <p class="book-desc">{entry.data.description}</p>
+                            )}
+                            <div class="volume-marginalia">
+                              <span class="marginalia-mark">¶</span>
+                              <span class="marginalia-note">Pages kept for repeated reference and foundational mental models.</span>
+                            </div>
+                            <div class="book-card-footer">
+                              <a href={`/entry/${entry.id}/`} class="room-card-arrow">Read notes & takeaways →</a>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* ROOM 5: GAMES — Personal Game Room */}
+              {catId === 'games' && (
+                <div class="games-grid">
+                  {rEntries.map(entry => {
+                    const isAccessible = visibleEntryIds.has(entry.id);
+                    const isAbsPrivate = entry.data.visibility === 'absolute_private';
+                    if (!isAccessible) {
+                      return (
+                        <div class="game-card locked-entry">
+                          <a href={`/entry/${entry.id}/`} class="locked-entry-link">
+                            <div class="locked-entry-inner">
+                              <span class="locked-icon" aria-hidden="true">🔒</span>
+                              <span class="locked-title">{entry.data.title}</span>
+                              <span class="locked-badge">{isAbsPrivate ? 'Owner only' : 'Private'}</span>
+                            </div>
+                          </a>
+                        </div>
+                      );
+                    }
+                    const isChess = entry.id.includes('chess') || entry.data.type === 'chess';
+                    const isCodm = entry.id.includes('duty') || entry.data.title.includes('Call of Duty');
+                    const isMatiks = entry.id.includes('matik');
+
+                    if (isChess) {
+                      return (
+                        <article class="game-card chess-board-card">
+                          <div class="chess-tactical-header">
+                            <span class="chess-tag">TACTICAL BOARD</span>
+                            <span class="chess-coords-badge">64 SQUARES</span>
+                          </div>
+                          <h3 class="game-title">
+                            <a href={`/entry/${entry.id}/`}>{entry.data.title}</a>
+                          </h3>
+                          {entry.data.description && (
+                            <p class="game-desc">{entry.data.description}</p>
+                          )}
+                          <div class="chess-board-notation-strip" aria-hidden="true">
+                            <span class="notation-chip">1. e4 e5</span>
+                            <span class="notation-chip">2. Nf3 Nc6</span>
+                            <span class="notation-chip">3. Bb5</span>
+                          </div>
+                          <div class="game-card-footer">
+                            <a href={`/entry/${entry.id}/`} class="room-card-arrow">View tactical notes →</a>
+                          </div>
+                        </article>
+                      );
+                    }
+
+                    return (
+                      <article class="game-card crt-screen-card">
+                        <div class="crt-scanline-overlay" aria-hidden="true"></div>
+                        <div class="game-card-top">
+                          <span class="game-platform-pill">{isCodm ? 'MOBILE FPS' : isMatiks ? 'LOGIC GRID' : 'TACTICAL'}</span>
+                          <span class="crt-dot-indicator"></span>
+                        </div>
+                        <h3 class="game-title">
+                          <a href={`/entry/${entry.id}/`}>{entry.data.title}</a>
+                        </h3>
+                        {entry.data.description && (
+                          <p class="game-desc">{entry.data.description}</p>
+                        )}
+                        <div class="game-card-footer">
+                          <a href={`/entry/${entry.id}/`} class="room-card-arrow">View tactical notes →</a>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* ROOM 6: SPORTS — The Changing Physical Venue */}
+              {catId === 'sports' && (
+                <div class="sports-grid">
+                  {rEntries.map(entry => {
+                    const isAccessible = visibleEntryIds.has(entry.id);
+                    const isAbsPrivate = entry.data.visibility === 'absolute_private';
+                    if (!isAccessible) {
+                      return (
+                        <div class="sport-card locked-entry">
+                          <a href={`/entry/${entry.id}/`} class="locked-entry-link">
+                            <div class="locked-entry-inner">
+                              <span class="locked-icon" aria-hidden="true">🔒</span>
+                              <span class="locked-title">{entry.data.title}</span>
+                              <span class="locked-badge">{isAbsPrivate ? 'Owner only' : 'Private'}</span>
+                            </div>
+                          </a>
+                        </div>
+                      );
+                    }
+                    const sportStatus = (entry.data as any).sportStatus || 'Active';
+                    const isToPlay = sportStatus.toLowerCase().includes('want') || sportStatus.toLowerCase().includes('try');
+                    const isCricket = entry.id.includes('cricket');
+                    const isKabaddi = entry.id.includes('kabaddi');
+                    const isBasketball = entry.id.includes('basketball');
+                    const isFootball = entry.id.includes('football');
+
+                    return (
+                      <article class={`sport-card sport-venue-card ${isToPlay ? 'venue-wishlist' : 'venue-active'}`}>
+                        <div class="venue-chalk-motif" aria-hidden="true">
+                          {isCricket && (
+                            <svg class="chalk-field-svg" viewBox="0 0 200 70" fill="none">
+                              <rect x="20" y="20" width="160" height="30" stroke="currentColor" stroke-dasharray="3 3" stroke-width="1.2" />
+                              <line x1="50" y1="20" x2="50" y2="50" stroke="currentColor" stroke-width="1.5" />
+                              <line x1="150" y1="20" x2="150" y2="50" stroke="currentColor" stroke-width="1.5" />
+                            </svg>
+                          )}
+                          {isKabaddi && (
+                            <svg class="chalk-field-svg" viewBox="0 0 200 70" fill="none">
+                              <rect x="15" y="10" width="170" height="50" stroke="currentColor" stroke-dasharray="3 3" stroke-width="1" />
+                              <line x1="100" y1="10" x2="100" y2="60" stroke="currentColor" stroke-width="1.8" />
+                              <line x1="65" y1="10" x2="65" y2="60" stroke="currentColor" stroke-dasharray="3 2" stroke-width="1" />
+                              <line x1="135" y1="10" x2="135" y2="60" stroke="currentColor" stroke-dasharray="3 2" stroke-width="1" />
+                            </svg>
+                          )}
+                          {isBasketball && (
+                            <svg class="chalk-field-svg" viewBox="0 0 200 70" fill="none">
+                              <rect x="10" y="10" width="180" height="50" stroke="currentColor" stroke-dasharray="3 3" stroke-width="1" />
+                              <path d="M 10,20 C 45,20 45,50 10,50" stroke="currentColor" stroke-width="1.2" />
+                              <circle cx="18" cy="35" r="5" stroke="currentColor" stroke-width="1.2" />
+                            </svg>
+                          )}
+                          {isFootball && (
+                            <svg class="chalk-field-svg" viewBox="0 0 200 70" fill="none">
+                              <rect x="10" y="10" width="180" height="50" stroke="currentColor" stroke-dasharray="3 3" stroke-width="1" />
+                              <line x1="100" y1="10" x2="100" y2="60" stroke="currentColor" stroke-width="1" />
+                              <circle cx="100" cy="35" r="14" stroke="currentColor" stroke-dasharray="3 3" stroke-width="1" />
+                              <rect x="10" y="18" width="24" height="34" stroke="currentColor" stroke-width="1.2" />
+                            </svg>
+                          )}
+                        </div>
+
+                        <div class="sport-card-top">
+                          <span class={`sport-status-pill ${isToPlay ? 'status-want-to-try' : 'status-playing'}`}>
+                            {isToPlay ? 'WISHBOARD · TO LEARN & PLAY' : 'ON FIELD · ACTIVE PLAY'}
+                          </span>
+                        </div>
+                        <h3 class="sport-title">
+                          <a href={`/entry/${entry.id}/`}>{entry.data.title}</a>
+                        </h3>
+                        {entry.data.description && (
+                          <p class="sport-desc">{entry.data.description}</p>
+                        )}
+                        <div class="sport-card-footer">
+                          <a href={`/entry/${entry.id}/`} class="room-card-arrow">View pursuit →</a>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* ROOM 7: FITNESS — Personal Training Log */}
+              {catId === 'fitness' && (
+                <div class="fitness-room-wrapper training-notebook-room">
+                  {/* Track Lanes Motif */}
+                  <div class="track-lanes-motif" aria-hidden="true">
+                    <div class="track-curve-line lane-1"></div>
+                    <div class="track-curve-line lane-2"></div>
+                    <div class="track-curve-line lane-3"></div>
+                  </div>
+
+                  {/* Personal Bests Board */}
+                  <div class="fitness-pb-section">
+                    <div class="sub-room-header">
+                      <div class="stopwatch-bezel-tag">
+                        <span class="bezel-dot"></span>
+                        <span class="sub-room-badge">CHRONOMETER & ROAD BENCHMARKS</span>
+                      </div>
+                      <h3 class="sub-room-title">Personal Bests & All-Time Numbers</h3>
+                      <p class="sub-room-note">Confirmed public road records. Automatically compared against all logged runs.</p>
+                    </div>
+                    <div class="fitness-pbs-grid">
+                      <div class="pb-card stopwatch-card">
+                        <span class="pb-label">Fastest 1K</span>
+                        <span class="pb-value pb-mono">{runningPBs?.fastest1k || '3:58'}</span>
+                        <span class="pb-sub">verified road split</span>
+                      </div>
+                      <div class="pb-card stopwatch-card">
+                        <span class="pb-label">Fastest 5K</span>
+                        <span class="pb-value pb-mono">{runningPBs?.fastest5k || '23:45'}</span>
+                        <span class="pb-sub">race / tempo benchmark</span>
+                      </div>
+                      <div class="pb-card stopwatch-card">
+                        <span class="pb-label">Fastest 10K</span>
+                        <span class="pb-value pb-mono">{runningPBs?.fastest10k || '58:57'}</span>
+                        <span class="pb-sub">endurance standard</span>
+                      </div>
+                      <div class="pb-card stopwatch-card">
+                        <span class="pb-label">Longest Run</span>
+                        <span class="pb-value">{runningPBs?.longestRun || '15 km'}</span>
+                        <span class="pb-sub">single session distance</span>
+                      </div>
+                      <div class="pb-card stopwatch-card">
+                        <span class="pb-label">Best Pace</span>
+                        <span class="pb-value pb-mono">{runningPBs?.fastestPace || '4:45 /km'}</span>
+                        <span class="pb-sub">5K pace benchmark</span>
+                      </div>
+                      <div class="pb-card stopwatch-card highlight">
+                        <span class="pb-label">Total Distance</span>
+                        <span class="pb-value">{runningPBs?.totalDisplay || '200+ km'}</span>
+                        <span class="pb-sub">{runningPBs && runningPBs.totalRuns > 0 ? `${runningPBs.totalRuns} logged runs` : 'career road total'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Running Day-by-Day Log */}
+                  <div class="fitness-runs-section">
+                    <div class="sub-room-header">
+                      <span class="sub-room-badge">Road & Trail Log</span>
+                      <h3 class="sub-room-title">Running History</h3>
+                    </div>
+                    {runEntries.length > 0 ? (
+                      <div class="fitness-runs-grid">
+                        {runEntries.map(entry => {
+                          const isAccessible = visibleEntryIds.has(entry.id);
+                          const isAbsPrivate = entry.data.visibility === 'absolute_private';
+                          if (!isAccessible) {
+                            return (
+                              <div class="run-card locked-entry">
+                                <a href={`/entry/${entry.id}/`} class="locked-entry-link">
+                                  <div class="locked-entry-inner">
+                                    <span class="locked-icon" aria-hidden="true">🔒</span>
+                                    <span class="locked-title">{entry.data.title}</span>
+                                    <span class="locked-badge">{isAbsPrivate ? 'Owner only' : 'Private'}</span>
+                                  </div>
+                                </a>
+                              </div>
+                            );
+                          }
+                          const dist = (entry.data as any).distance;
+                          const dur = (entry.data as any).duration;
+                          const pace = (entry.data as any).pace;
+                          return (
+                            <article class="run-card">
+                              <div class="run-card-top">
+                                {entry.data.date && <span class="run-date">{niceDate(entry.data.date)}</span>}
+                                <span class="run-badge">Run</span>
+                              </div>
+                              <div class="run-stats">
+                                <div class="run-stat-item main">
+                                  <span class="stat-num">{dist ? `${dist}k` : '—'}</span>
+                                  <span class="stat-label">Distance</span>
+                                </div>
+                                {dur && (
+                                  <div class="run-stat-item">
+                                    <span class="stat-num">{dur}</span>
+                                    <span class="stat-label">Time</span>
+                                  </div>
+                                )}
+                                {pace && (
+                                  <div class="run-stat-item">
+                                    <span class="stat-num">{pace}</span>
+                                    <span class="stat-label">Pace</span>
+                                  </div>
+                                )}
+                              </div>
+                              <h4 class="run-title">
+                                <a href={`/entry/${entry.id}/`}>{entry.data.title}</a>
+                              </h4>
+                              <div class="run-card-footer">
+                                <a href={`/entry/${entry.id}/`} class="room-card-arrow">View run splits →</a>
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
                     ) : (
-                      <div class="record-thumb-vinyl" aria-hidden="true">
-                        <div class="record-vinyl-groove"></div>
+                      <div class="fitness-empty-state">
+                        <p class="fitness-empty-text">Detailed split logs and route entries will record here as runs are logged. Baseline personal records remain active and tracked above.</p>
                       </div>
                     )}
                   </div>
-                  <div class="record-main-info">
-                    <span class="record-title">{entry.data.title}</span>
-                    {artistName && <span class="record-artist">{artistName}</span>}
-                  </div>
-                  {entry.data.date && (
-                    <span class="record-date">{niceDate(entry.data.date)}</span>
-                  )}
-                  <span class="record-arrow">Listen →</span>
-                </a>
-              );
-            })}
-          </div>
-        </section>
-      )}
 
-      {otherInterests.length > 0 && (
-        <section class="interests-gallery">
-          {otherInterests.map(entry => {
-            const isAccessible = visibleEntryIds.has(entry.id);
-            const isAbsPrivate = entry.data.visibility === 'absolute_private';
-            if (!isAccessible) {
-              return (
-                <a href={`/entry/${entry.id}/`} class="interest-item int-locked locked-entry-link" aria-label={`Private: ${entry.data.title}`}>
-                  <div class="interest-content">
-                    <div class="locked-entry-inner">
-                      <span class="locked-icon" aria-hidden="true">🔒</span>
-                      <span class="locked-title">{entry.data.title}</span>
-                      <span class="locked-badge">{isAbsPrivate ? 'Owner only' : 'Private'}</span>
+                  {/* Gym & Strength Records */}
+                  <div class="fitness-gym-section">
+                    <div class="sub-room-header">
+                      <div class="iron-weight-badge">
+                        <span class="iron-plate-icon">🏋️</span>
+                        <span class="sub-room-badge">Iron Log & Compound Strength</span>
+                      </div>
+                      <h3 class="sub-room-title">Gym Heaviest Records</h3>
+                      <p class="sub-room-note">Confirmed compound barbell records. Automatically updates when higher numbers are logged.</p>
+                    </div>
+                    <div class="gym-records-table-wrap">
+                      <table class="gym-records-table">
+                        <thead>
+                          <tr>
+                            <th>Exercise</th>
+                            <th>Max Weight</th>
+                            <th>Reps</th>
+                            <th>Status</th>
+                            <th></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {gymRecords.map(rec => (
+                            <tr>
+                              <td class="gym-ex-name">
+                                <span class="ex-disc-bullet" aria-hidden="true"></span>
+                                {rec.name}
+                              </td>
+                              <td class="gym-ex-weight">{rec.maxWeight} kg</td>
+                              <td class="gym-ex-reps">{rec.repsAtMax} rep{rec.repsAtMax > 1 ? 's' : ''}</td>
+                              <td class="gym-ex-date">{rec.dateStr}</td>
+                              <td>
+                                {rec.entryId ? (
+                                  <a href={`/entry/${rec.entryId}/`} class="gym-row-arrow">Log →</a>
+                                ) : (
+                                  <span class="gym-confirmed-badge">Authoritative</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {gymEntries.length > 0 && (
+                      <div class="gym-workouts-grid" style="margin-top: 20px;">
+                        {gymEntries.map(entry => {
+                          const isAccessible = visibleEntryIds.has(entry.id);
+                          const isAbsPrivate = entry.data.visibility === 'absolute_private';
+                          if (!isAccessible) {
+                            return (
+                              <div class="gym-card locked-entry">
+                                <a href={`/entry/${entry.id}/`} class="locked-entry-link">
+                                  <div class="locked-entry-inner">
+                                    <span class="locked-icon" aria-hidden="true">🔒</span>
+                                    <span class="locked-title">{entry.data.title}</span>
+                                    <span class="locked-badge">{isAbsPrivate ? 'Owner only' : 'Private'}</span>
+                                  </div>
+                                </a>
+                              </div>
+                            );
+                          }
+                          return (
+                            <article class="gym-card">
+                              <h4 class="gym-title">
+                                <a href={`/entry/${entry.id}/`}>{entry.data.title}</a>
+                              </h4>
+                              {entry.data.description && <p class="gym-desc">{entry.data.description}</p>}
+                              <a href={`/entry/${entry.id}/`} class="room-card-arrow">View workout →</a>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ROOM 8: CHALLENGES — Expedition / Mission Board */}
+              {catId === 'challenges' && (
+                <div class="challenges-grid mission-board-room">
+                  {rEntries.map(entry => {
+                    const isAccessible = visibleEntryIds.has(entry.id);
+                    const isAbsPrivate = entry.data.visibility === 'absolute_private';
+                    if (!isAccessible) {
+                      return (
+                        <div class="challenge-card locked-entry">
+                          <a href={`/entry/${entry.id}/`} class="locked-entry-link">
+                            <div class="locked-entry-inner">
+                              <span class="locked-icon" aria-hidden="true">🔒</span>
+                              <span class="locked-title">{entry.data.title}</span>
+                              <span class="locked-badge">{isAbsPrivate ? 'Owner only' : 'Private'}</span>
+                            </div>
+                          </a>
+                        </div>
+                      );
+                    }
+                    const goal = (entry.data as any).goal;
+                    const progress = (entry.data as any).progress || 'Active Mission';
+                    return (
+                      <article class="challenge-card pinned-mission-dispatch">
+                        <div class="dispatch-thumbtack" aria-hidden="true"></div>
+                        <div class="dispatch-stamp-seal" aria-hidden="true">
+                          <span class="stamp-border">EXPEDITION DISPATCH</span>
+                          <span class="stamp-sub">90 DAYS · ACTIVE</span>
+                        </div>
+
+                        <div class="challenge-card-top">
+                          <span class="challenge-status-pill">{progress}</span>
+                          <span class="challenge-type">Consistency</span>
+                        </div>
+                        <h3 class="challenge-title">
+                          <a href={`/entry/${entry.id}/`}>{entry.data.title}</a>
+                        </h3>
+                        {goal && (
+                          <div class="challenge-goal-box">
+                            <span class="goal-label">Mission Directive</span>
+                            <p class="goal-text">{goal}</p>
+                          </div>
+                        )}
+
+                        <div class="mission-checkpoint-track">
+                          <div class="checkpoint-node completed">
+                            <span class="node-tick">✓</span>
+                            <span class="node-label">DAYS 1–30</span>
+                            <span class="node-state">Foundation</span>
+                          </div>
+                          <div class="checkpoint-connector active"></div>
+                          <div class="checkpoint-node current">
+                            <span class="node-tick">●</span>
+                            <span class="node-label">DAYS 31–60</span>
+                            <span class="node-state">Momentum</span>
+                          </div>
+                          <div class="checkpoint-connector"></div>
+                          <div class="checkpoint-node upcoming">
+                            <span class="node-tick">○</span>
+                            <span class="node-label">DAYS 61–90</span>
+                            <span class="node-state">Lock-In</span>
+                          </div>
+                        </div>
+
+                        {entry.data.description && (
+                          <p class="challenge-desc">{entry.data.description}</p>
+                        )}
+                        <div class="challenge-card-footer">
+                          <a href={`/entry/${entry.id}/`} class="room-card-arrow">Open mission briefing →</a>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* ROOM 9: MOVIES & ANIME — Private Screening Room */}
+              {catId === 'movies-anime' && (
+                <div class="screening-room">
+                  <div class="projector-cone-light" aria-hidden="true"></div>
+                  <div class="media-grid">
+                    {rEntries.map(entry => {
+                      const isAccessible = visibleEntryIds.has(entry.id);
+                      const isAbsPrivate = entry.data.visibility === 'absolute_private';
+                      if (!isAccessible) {
+                        return (
+                          <div class="media-card locked-entry">
+                            <a href={`/entry/${entry.id}/`} class="locked-entry-link">
+                              <div class="locked-entry-inner">
+                                <span class="locked-icon" aria-hidden="true">🔒</span>
+                                <span class="locked-title">{entry.data.title}</span>
+                                <span class="locked-badge">{isAbsPrivate ? 'Owner only' : 'Private'}</span>
+                              </div>
+                            </a>
+                          </div>
+                        );
+                      }
+                      const mediaType = (entry.data as any).mediaType || entry.data.type;
+                      return (
+                        <article class="media-card film-strip-card">
+                          <div class="film-sprockets left" aria-hidden="true">
+                            <span></span><span></span><span></span><span></span><span></span><span></span>
+                          </div>
+                          <div class="film-cell-frame">
+                            <div class="media-card-top">
+                              <span class="media-type-pill">{mediaType}</span>
+                              <span class="media-curation-tag">35mm Archive</span>
+                            </div>
+                            <h3 class="media-title">
+                              <a href={`/entry/${entry.id}/`}>{entry.data.title}</a>
+                            </h3>
+                            {entry.data.description && (
+                              <p class="media-desc">{entry.data.description}</p>
+                            )}
+                            <div class="media-card-footer">
+                              <a href={`/entry/${entry.id}/`} class="room-card-arrow">View collection notes →</a>
+                            </div>
+                          </div>
+                          <div class="film-sprockets right" aria-hidden="true">
+                            <span></span><span></span><span></span><span></span><span></span><span></span>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* ROOM 10: TECHNOLOGY — Personal Workbench / Laboratory */}
+              {catId === 'technology' && (
+                <div class="laboratory-room">
+                  <div class="tech-grid">
+                    {rEntries.map(entry => {
+                      const isAccessible = visibleEntryIds.has(entry.id);
+                      const isAbsPrivate = entry.data.visibility === 'absolute_private';
+                      if (!isAccessible) {
+                        return (
+                          <div class="tech-card locked-entry">
+                            <a href={`/entry/${entry.id}/`} class="locked-entry-link">
+                              <div class="locked-entry-inner">
+                                <span class="locked-icon" aria-hidden="true">🔒</span>
+                                <span class="locked-title">{entry.data.title}</span>
+                                <span class="locked-badge">{isAbsPrivate ? 'Owner only' : 'Private'}</span>
+                              </div>
+                            </a>
+                          </div>
+                        );
+                      }
+                      return (
+                        <article class="tech-card lab-terminal-card">
+                          <div class="lab-terminal-header">
+                            <div class="terminal-dots" aria-hidden="true">
+                              <span></span><span></span><span></span>
+                            </div>
+                            <span class="terminal-path">~/raj/workbench/curiosities</span>
+                            <span class="tech-status">SILICON & ARCH</span>
+                          </div>
+                          <div class="terminal-body">
+                            <h3 class="tech-title">
+                              <a href={`/entry/${entry.id}/`}>{entry.data.title}</a>
+                            </h3>
+                            {entry.data.description && (
+                              <p class="tech-desc">{entry.data.description}</p>
+                            )}
+                            <div class="tech-domains-strip">
+                              <span class="domain-tag">AI & ML</span>
+                              <span class="domain-tag">Robotics</span>
+                              <span class="domain-tag">C / C++</span>
+                              <span class="domain-tag">Python</span>
+                              <span class="domain-tag">Arduino</span>
+                              <span class="domain-tag">Linux / Mac</span>
+                            </div>
+                            <div class="tech-card-footer">
+                              <a href={`/entry/${entry.id}/`} class="room-card-arrow">Explore architecture →</a>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* ROOM 11: TEMPORARY OBSESSIONS — The Living Vitrine */}
+              {catId === 'temporary-obsessions' && (
+                <div class="vitrine-gallery-room">
+                  <div class="vitrine-spotlight-beam" aria-hidden="true"></div>
+                  <div class="vitrine-pedestal-display">
+                    <div class="vitrine-glass-hood" aria-hidden="true">
+                      <div class="vitrine-light-reflection"></div>
+                      <div class="vitrine-specimen-symbol">✦</div>
+                    </div>
+                    <div class="vitrine-pedestal-base">
+                      <div class="vitrine-brass-plaque">
+                        <div class="plaque-corner tl"></div>
+                        <div class="plaque-corner tr"></div>
+                        <div class="plaque-corner bl"></div>
+                        <div class="plaque-corner br"></div>
+                        <span class="plaque-accession-no">EXHIBIT NO. 11 · TEMPORARY OBSESSION</span>
+                        <h3 class="plaque-title">Curatorial In-Between</h3>
+                        <p class="plaque-statement">
+                          “Currently in the replacement stage. Something meaningful will take this spot soon. Stay tuned.”
+                        </p>
+                        <div class="plaque-status-indicator">
+                          <span class="pulse-beacon" aria-hidden="true"></span>
+                          <span class="pulse-label">RESERVED FOR FUTURE OBSESSION</span>
+                        </div>
+                        {rEntries.length > 0 && rEntries.map(entry => {
+                          const isAccessible = visibleEntryIds.has(entry.id);
+                          if (!isAccessible) return null;
+                          return (
+                            <div class="obsession-entry-link-wrap" style="margin-top: 14px;">
+                              <a href={`/entry/${entry.id}/`} class="room-card-arrow">
+                                {entry.data.title} →
+                              </a>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
-                </a>
-              );
-            }
-            const t = entry.data.type;
-            let typeClass = 'int-default';
-            if (t === 'car') typeClass = 'int-car';
-            else if (t === 'space') typeClass = 'int-space';
-            else if (t === 'chess') typeClass = 'int-chess';
-            else if (t === 'book' || t === 'movie' || t === 'anime') typeClass = 'int-culture';
-            
-            return (
-              <a href={`/entry/${entry.id}/`} class={`interest-item ${typeClass}`}>
-                {entry.data.cover && (
-                  <figure class="interest-cover">
-                    <img src={entry.data.cover} alt={entry.data.title} loading="lazy" />
-                  </figure>
-                )}
-                
-                <div class="interest-content">
-                  <div class="interest-meta">
-                    <span class="i-type">{entry.data.type}</span>
-                    {entry.data.date && <span class="i-date">{niceDate(entry.data.date)}</span>}
-                  </div>
-                  <h2 class="interest-title">{entry.data.title}</h2>
-                  {entry.data.description && <p class="interest-desc">{entry.data.description}</p>}
-                  <span class="interest-arrow">Follow thread →</span>
                 </div>
-              </a>
-            );
-          })}
-        </section>
-      )}
+              )}
+            </section>
+          );
+        })}
+      </div>
 
       <footer class="interests-footer">
         <p class="interests-footer-label">Curiosity rarely stays in one room.</p>
@@ -588,4 +1564,1903 @@ const otherInterests = found.filter(e => e.data.type !== 'music');
     white-space: nowrap;
     flex-shrink: 0;
   }
+
+  /* ── People section in Life world ────────────────────────────────────────── */
+  .life-people-list {
+    display: flex;
+    flex-direction: column;
+    gap: 36px;
+    max-width: 800px;
+  }
+
+  .person-node {
+    position: relative;
+  }
+
+  .person-main {
+    margin-bottom: 12px;
+  }
+
+  .person-card {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 14px;
+    padding: 12px 18px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.02);
+    border: 1px solid var(--line, #0000001f);
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .person-card:hover {
+    background: rgba(0, 0, 0, 0.04);
+    border-color: var(--ink, #1f1e1c);
+  }
+
+  .person-name-link {
+    text-decoration: none;
+    color: inherit;
+  }
+  .person-name {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--ink, #1f1e1c);
+    margin: 0;
+  }
+
+  .person-location {
+    font-family: var(--mono, monospace);
+    font-size: 11px;
+    color: var(--text-light, #8a8880);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .person-arrow {
+    margin-left: auto;
+    font-family: var(--mono, monospace);
+    font-size: 11px;
+    color: var(--text-light, #8a8880);
+    text-decoration: none;
+    transition: color 0.15s, transform 0.15s;
+  }
+  .person-card:hover .person-arrow {
+    color: var(--ink, #1f1e1c);
+    transform: translateX(3px);
+  }
+
+  .person-events-branch {
+    margin-left: 24px;
+    padding-left: 24px;
+    border-left: 1px solid var(--line, #0000001f);
+    margin-top: 8px;
+  }
+
+  .person-events-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .person-event-item {
+    position: relative;
+  }
+
+  .person-event-link {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 8px 14px;
+    border-radius: 4px;
+    text-decoration: none;
+    color: inherit;
+    background: var(--bg, #fcfbf9);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    transition: background 0.15s, border-color 0.15s, transform 0.15s;
+  }
+  .person-event-link:hover {
+    background: rgba(0, 0, 0, 0.03);
+    border-color: var(--line, #0000002e);
+    transform: translateX(4px);
+  }
+
+  .event-title {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 15px;
+    color: var(--ink, #1f1e1c);
+    flex: 1;
+  }
+
+  .event-arrow {
+    font-family: var(--mono, monospace);
+    font-size: 12px;
+    color: var(--text-light, #8a8880);
+    transition: transform 0.15s;
+  }
+  .person-event-link:hover .event-arrow {
+    transform: translateX(3px);
+    color: var(--ink, #1f1e1c);
+  }
+
+  /* ── Things I Like / Cabinet of Curiosities Styles ─────────────────────────── */
+  .interests-world-container {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 0 16px 80px 16px;
+  }
+
+  .interests-header {
+    margin-bottom: 50px;
+    padding-bottom: 30px;
+    border-bottom: 1px solid var(--line, rgba(0, 0, 0, 0.12));
+  }
+
+  .interests-curator-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono, monospace);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--text-light, #8a8880);
+    margin-bottom: 10px;
+  }
+
+  .curator-wing-no {
+    color: var(--ink, #1f1e1c);
+    font-weight: 600;
+  }
+
+  .curator-sep {
+    opacity: 0.4;
+  }
+
+  .interests-title {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 44px;
+    font-weight: 600;
+    line-height: 1.15;
+    color: var(--ink, #1f1e1c);
+    margin: 0 0 12px 0;
+    letter-spacing: -0.02em;
+  }
+
+  .interests-lede {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 18px;
+    line-height: 1.6;
+    color: var(--ink, #1f1e1c);
+    opacity: 0.85;
+    max-width: 720px;
+    margin: 0 0 28px 0;
+  }
+
+  /* Gallery Directory Navigation */
+  .curiosities-nav {
+    margin-top: 24px;
+    padding: 16px 20px;
+    background: rgba(0, 0, 0, 0.02);
+    border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+    border-radius: 8px;
+  }
+
+  .curiosities-nav-label {
+    font-family: var(--mono, monospace);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-light, #8a8880);
+    margin-bottom: 12px;
+  }
+
+  .curiosities-nav-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .curiosity-nav-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+    font-family: var(--mono, monospace);
+    font-size: 11px;
+    padding: 6px 12px;
+    border: 1px solid var(--line, rgba(0, 0, 0, 0.15));
+    border-radius: 20px;
+    color: var(--ink, #1f1e1c);
+    background: var(--bg, #fcfbf9);
+    transition: all 0.18s ease;
+  }
+
+  .curiosity-nav-pill:hover {
+    border-color: var(--ink, #1f1e1c);
+    background: var(--ink, #1f1e1c);
+    color: #fff;
+    transform: translateY(-1px);
+  }
+
+  .nav-room-num {
+    font-size: 10px;
+    opacity: 0.6;
+    font-weight: 600;
+  }
+
+  .curiosity-nav-pill:hover .nav-room-num {
+    opacity: 0.9;
+  }
+
+  /* Cabinet Rooms Stack */
+  .curiosities-cabinet {
+    display: flex;
+    flex-direction: column;
+    gap: 64px;
+  }
+
+  .curiosity-room {
+    scroll-margin-top: 40px;
+    padding: 36px;
+    border-radius: 10px;
+    border: 1px solid var(--line, rgba(0, 0, 0, 0.12));
+    position: relative;
+    overflow: hidden;
+  }
+
+  .room-header {
+    margin-bottom: 28px;
+    position: relative;
+    z-index: 2;
+  }
+
+  .room-meta-tag {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+
+  .room-num {
+    font-family: var(--mono, monospace);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    padding: 2px 6px;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 3px;
+    color: var(--ink, #1f1e1c);
+  }
+
+  .room-badge {
+    font-family: var(--mono, monospace);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-light, #8a8880);
+  }
+
+  .room-title {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 30px;
+    font-weight: 600;
+    color: var(--ink, #1f1e1c);
+    margin: 4px 0 6px 0;
+    letter-spacing: -0.01em;
+  }
+
+  .room-desc {
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: var(--text-light, #8a8880);
+    margin: 0;
+    max-width: 680px;
+  }
+
+  /* Shared Card & Typography Elements */
+  .car-title a,
+  .book-title a,
+  .game-title a,
+  .sport-title a,
+  .challenge-title a,
+  .media-title a,
+  .tech-title a,
+  .space-title a,
+  .run-title a,
+  .gym-title a {
+    text-decoration: none;
+    color: inherit;
+    transition: opacity 0.15s;
+  }
+
+  .car-title a:hover,
+  .book-title a:hover,
+  .game-title a:hover,
+  .sport-title a:hover,
+  .challenge-title a:hover,
+  .media-title a:hover,
+  .tech-title a:hover,
+  .space-title a:hover,
+  .run-title a:hover,
+  .gym-title a:hover {
+    opacity: 0.75;
+  }
+
+  .room-card-arrow {
+    font-family: var(--mono, monospace);
+    font-size: 11px;
+    text-decoration: none;
+    color: var(--text-light, #8a8880);
+    margin-top: auto;
+    padding-top: 10px;
+    display: inline-block;
+    transition: color 0.15s, transform 0.15s;
+  }
+
+  .room-card-arrow:hover {
+    color: var(--ink, #1f1e1c);
+    transform: translateX(3px);
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     ROOM 01: MUSIC — The Listening Room (Vinyl Shelf)
+     ══════════════════════════════════════════════════════════════════════════ */
+  .curiosity-room-music {
+    background: #faf8f5;
+    border-color: #e4ddd3;
+  }
+
+  .turntable-bench {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .vinyl-crate-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: 4px;
+    font-family: var(--mono, monospace);
+    font-size: 10px;
+    color: var(--text-light, #8a8880);
+    letter-spacing: 0.08em;
+  }
+
+  .music-records-shelf {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .record-row-item {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 14px 18px;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 8px;
+    text-decoration: none;
+    color: var(--ink, #1f1e1c);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .record-row-item:hover {
+    border-color: rgba(0, 0, 0, 0.25);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.04);
+  }
+
+  .record-index {
+    font-family: var(--mono, monospace);
+    font-size: 12px;
+    color: var(--text-light, #8a8880);
+    width: 24px;
+  }
+
+  .record-thumb-frame {
+    position: relative;
+    width: 58px;
+    height: 58px;
+    flex-shrink: 0;
+  }
+
+  .record-thumb-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 4px;
+    position: relative;
+    z-index: 2;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  }
+
+  .record-thumb-jacket {
+    width: 100%;
+    height: 100%;
+    background: #2a2824;
+    color: #e5ded3;
+    border-radius: 4px;
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 6px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  }
+
+  .jacket-corner-tag {
+    font-family: var(--mono, monospace);
+    font-size: 8px;
+    opacity: 0.6;
+  }
+
+  .jacket-short-title {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 10px;
+    line-height: 1.1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .record-thumb-vinyl {
+    position: absolute;
+    top: 3px;
+    left: 12px;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: #181715;
+    z-index: 1;
+    transition: transform 0.25s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+
+  .record-row-item:hover .record-thumb-vinyl {
+    transform: translateX(14px) rotate(180deg);
+  }
+
+  .record-vinyl-groove {
+    position: absolute;
+    inset: 4px;
+    border-radius: 50%;
+    border: 1px dashed rgba(255, 255, 255, 0.15);
+  }
+
+  .record-vinyl-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 14px;
+    height: 14px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: #d4a373;
+    border: 1px solid rgba(0, 0, 0, 0.4);
+  }
+
+  .record-main-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .record-title {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 17px;
+    font-weight: 600;
+    margin: 0 0 2px 0;
+    color: var(--ink, #1f1e1c);
+  }
+
+  .record-artist {
+    font-family: var(--mono, monospace);
+    font-size: 11px;
+    color: var(--text-light, #8a8880);
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  .record-desc {
+    font-size: 12.5px;
+    line-height: 1.4;
+    color: var(--ink, #1f1e1c);
+    opacity: 0.8;
+    margin: 0;
+  }
+
+  .record-status-strip {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .analogue-wave-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 16px;
+    opacity: 0.4;
+  }
+
+  .record-row-item:hover .analogue-wave-bars {
+    opacity: 0.9;
+  }
+
+  .aw-bar {
+    width: 3px;
+    background: var(--ink, #1f1e1c);
+    border-radius: 1px;
+    transition: height 0.2s ease;
+  }
+  .aw-bar.b-1 { height: 6px; }
+  .aw-bar.b-2 { height: 14px; }
+  .aw-bar.b-3 { height: 10px; }
+  .aw-bar.b-4 { height: 8px; }
+
+  .record-row-item:hover .aw-bar.b-1 { height: 12px; }
+  .record-row-item:hover .aw-bar.b-2 { height: 8px; }
+  .record-row-item:hover .aw-bar.b-3 { height: 15px; }
+  .record-row-item:hover .aw-bar.b-4 { height: 11px; }
+
+  .record-arrow {
+    font-family: var(--mono, monospace);
+    font-size: 11px;
+    color: var(--text-light, #8a8880);
+  }
+  .record-row-item:hover .record-arrow {
+    color: var(--ink, #1f1e1c);
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     ROOM 02: CARS — The Private Garage at Night
+     ══════════════════════════════════════════════════════════════════════════ */
+  .curiosity-room-cars {
+    background: #14161a;
+    border-color: #272a30;
+    color: #e2e4e8;
+  }
+
+  .curiosity-room-cars .room-num {
+    background: rgba(255, 255, 255, 0.1);
+    color: #e2e4e8;
+  }
+  .curiosity-room-cars .room-title {
+    color: #f4f5f7;
+  }
+  .curiosity-room-cars .room-desc {
+    color: #9da3af;
+  }
+
+  .garage-overhead-beam {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 160px;
+    background: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.07) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .garage-bay-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 22px;
+    position: relative;
+    z-index: 2;
+  }
+
+  .garage-machine-card {
+    background: #1c1f24;
+    border: 1px solid #2d3139;
+    border-radius: 8px;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.2s ease;
+  }
+
+  .garage-machine-card:hover {
+    border-color: #4a5160;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  }
+
+  .machine-bay-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }
+
+  .machine-make {
+    font-family: var(--mono, monospace);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #8f97a5;
+  }
+
+  .garage-machine-card .car-title {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 22px;
+    font-weight: 600;
+    color: #f4f5f7;
+    margin: 2px 0 0 0;
+  }
+
+  .machine-bay-tag {
+    font-family: var(--mono, monospace);
+    font-size: 9px;
+    padding: 3px 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 3px;
+    color: #adb5c4;
+    letter-spacing: 0.08em;
+  }
+
+  .machine-blueprint-viewport {
+    height: 100px;
+    background: #16181d;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 10px 0 16px 0;
+  }
+
+  .blueprint-grid-lines {
+    position: absolute;
+    inset: 0;
+    background-image: 
+      linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    background-size: 16px 16px;
+  }
+
+  .car-silhouette-svg {
+    width: 86%;
+    height: auto;
+    color: #9aa2b1;
+    position: relative;
+    z-index: 2;
+    transition: color 0.2s, transform 0.2s;
+  }
+
+  .garage-machine-card:hover .car-silhouette-svg {
+    color: #e2e8f0;
+    transform: scale(1.02);
+  }
+
+  /* Stamped Chassis Plate */
+  .chassis-spec-plate {
+    background: linear-gradient(135deg, #24272e, #1e2025);
+    border: 1px solid #383e4a;
+    border-radius: 4px;
+    padding: 12px 14px;
+    position: relative;
+    margin: 6px 0 14px 0;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .rivet {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #505866;
+    border: 1px solid #14161a;
+  }
+  .rivet.r-tl { top: 4px; left: 4px; }
+  .rivet.r-tr { top: 4px; right: 4px; }
+  .rivet.r-bl { bottom: 4px; left: 4px; }
+  .rivet.r-br { bottom: 4px; right: 4px; }
+
+  .plate-top-bar {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono, monospace);
+    font-size: 9px;
+    color: #8c95a6;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .plate-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .plate-field {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono, monospace);
+    font-size: 10px;
+  }
+
+  .field-k {
+    color: #8c95a6;
+  }
+  .field-v {
+    color: #e2e8f0;
+    font-weight: 500;
+  }
+
+  .machine-desc {
+    font-size: 13px;
+    line-height: 1.5;
+    color: #b0b7c4;
+    margin: 4px 0 16px 0;
+  }
+
+  .machine-card-footer {
+    margin-top: auto;
+    padding-top: 8px;
+  }
+
+  .garage-inspect-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono, monospace);
+    font-size: 11px;
+    text-decoration: none;
+    color: #9aa2b1;
+    transition: color 0.15s, transform 0.15s;
+  }
+
+  .garage-inspect-btn:hover {
+    color: #f4f5f7;
+    transform: translateX(3px);
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     ROOM 03: SPACE — The Personal Observatory
+     ══════════════════════════════════════════════════════════════════════════ */
+  .curiosity-room-space {
+    background: #07090e;
+    border-color: #1a202c;
+    color: #e2e8f0;
+  }
+
+  .curiosity-room-space .room-num {
+    background: rgba(255, 255, 255, 0.12);
+    color: #e2e8f0;
+  }
+  .curiosity-room-space .room-title {
+    color: #f8fafc;
+  }
+  .curiosity-room-space .room-desc {
+    color: #94a3b8;
+  }
+
+  .starfield-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .stars-deep {
+    background-image: 
+      radial-gradient(1px 1px at 20px 30px, #ffffff, rgba(0,0,0,0)),
+      radial-gradient(1px 1px at 80px 120px, rgba(255,255,255,0.8), rgba(0,0,0,0)),
+      radial-gradient(1px 1px at 150px 70px, rgba(255,255,255,0.6), rgba(0,0,0,0)),
+      radial-gradient(1.5px 1.5px at 240px 180px, #ffffff, rgba(0,0,0,0)),
+      radial-gradient(1px 1px at 320px 90px, rgba(255,255,255,0.7), rgba(0,0,0,0)),
+      radial-gradient(1px 1px at 450px 220px, rgba(255,255,255,0.6), rgba(0,0,0,0));
+    background-size: 500px 300px;
+    opacity: 0.5;
+  }
+
+  .observatory-notebook-intro {
+    position: relative;
+    padding: 24px 28px;
+    background: rgba(15, 23, 42, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    margin-bottom: 28px;
+  }
+
+  .reticle-corner {
+    position: absolute;
+    font-family: var(--mono, monospace);
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.3);
+    line-height: 1;
+  }
+  .reticle-corner.tl { top: 6px; left: 8px; }
+  .reticle-corner.tr { top: 6px; right: 8px; }
+  .reticle-corner.bl { bottom: 6px; left: 8px; }
+  .reticle-corner.br { bottom: 6px; right: 8px; }
+
+  .observatory-coordinates {
+    display: flex;
+    gap: 16px;
+    font-family: var(--mono, monospace);
+    font-size: 9px;
+    color: #64748b;
+    letter-spacing: 0.1em;
+    margin-bottom: 12px;
+  }
+
+  .curiosity-room-space .space-quote-text {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 16px;
+    font-style: italic;
+    line-height: 1.6;
+    color: #e2e8f0;
+    margin: 0;
+  }
+
+  .space-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    position: relative;
+    z-index: 2;
+  }
+
+  .observatory-concept-card {
+    background: #0f141e;
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.2s ease;
+  }
+
+  .observatory-concept-card:hover {
+    border-color: #38bdf8;
+    box-shadow: 0 0 20px rgba(56, 189, 248, 0.08);
+    transform: translateY(-2px);
+  }
+
+  .concept-celestial-reticle {
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 14px;
+    background: radial-gradient(circle, rgba(56, 189, 248, 0.05) 0%, transparent 70%);
+  }
+
+  .celestial-orbit-svg {
+    width: 100px;
+    height: 100px;
+  }
+
+  .concept-meta-strip {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono, monospace);
+    font-size: 9px;
+    color: #64748b;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+
+  .observatory-concept-card .space-title {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 20px;
+    font-weight: 600;
+    color: #f8fafc;
+    margin: 0 0 8px 0;
+  }
+
+  .observatory-concept-card .space-desc {
+    font-size: 13px;
+    line-height: 1.5;
+    color: #94a3b8;
+    margin: 0 0 16px 0;
+  }
+
+  .observatory-deep-link {
+    font-family: var(--mono, monospace);
+    font-size: 11px;
+    text-decoration: none;
+    color: #64748b;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 0.15s, transform 0.15s;
+  }
+
+  .observatory-concept-card:hover .observatory-deep-link {
+    color: #38bdf8;
+    transform: translateX(3px);
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     ROOM 04: BOOKS — The Personal Study
+     ══════════════════════════════════════════════════════════════════════════ */
+  .curiosity-room-books {
+    background: #faf7f2;
+    border-color: #e5ded3;
+  }
+
+  .study-shelf-header {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: 4px;
+    font-family: var(--mono, monospace);
+    font-size: 10px;
+    color: var(--text-light, #8a8880);
+    letter-spacing: 0.08em;
+    margin-bottom: 20px;
+  }
+
+  .books-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 22px;
+  }
+
+  .study-volume-card {
+    background: #fff;
+    border: 1px solid #e2dacd;
+    border-radius: 6px;
+    padding: 24px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.03);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .study-volume-card:hover {
+    transform: translateY(-4px) rotate(-0.5deg);
+    border-color: #8c7355;
+    box-shadow: 4px 8px 20px rgba(0, 0, 0, 0.08);
+  }
+
+  .volume-bookmark-ribbon {
+    position: absolute;
+    top: 0;
+    right: 28px;
+    width: 10px;
+    height: 28px;
+    background: #a63a2c;
+    border-radius: 0 0 3px 3px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  .volume-spine-edge {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 6px;
+    background: linear-gradient(90deg, rgba(0, 0, 0, 0.08), transparent);
+    border-radius: 6px 0 0 6px;
+  }
+
+  .volume-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .book-status-pill {
+    font-family: var(--mono, monospace);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 6px;
+    background: #edf3e7;
+    color: #3b6b22;
+    border-radius: 3px;
+    border: 1px solid #d3e2c8;
+  }
+
+  .volume-author {
+    font-family: var(--mono, monospace);
+    font-size: 10px;
+    text-transform: uppercase;
+    color: var(--text-light, #8a8880);
+    letter-spacing: 0.06em;
+  }
+
+  .study-volume-card .book-title {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 21px;
+    font-weight: 600;
+    color: var(--ink, #1f1e1c);
+    margin: 0 0 8px 0;
+    line-height: 1.25;
+  }
+
+  .study-volume-card .book-desc {
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--ink, #1f1e1c);
+    opacity: 0.85;
+    margin: 0 0 16px 0;
+  }
+
+  .volume-marginalia {
+    padding: 10px 12px;
+    background: #faf8f5;
+    border-left: 2px solid #c4b5a2;
+    border-radius: 0 4px 4px 0;
+    display: flex;
+    gap: 8px;
+    font-size: 12px;
+    font-style: italic;
+    color: #6e675f;
+    margin-bottom: 16px;
+  }
+
+  .marginalia-mark {
+    font-family: var(--serif, Georgia, serif);
+    font-style: normal;
+    font-size: 14px;
+    color: #a63a2c;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     ROOM 05: GAMES — Personal Game Room & Chess
+     ══════════════════════════════════════════════════════════════════════════ */
+  .curiosity-room-games {
+    background: #191b1f;
+    border-color: #2b2f38;
+    color: #e2e4e8;
+  }
+
+  .curiosity-room-games .room-num {
+    background: rgba(255, 255, 255, 0.1);
+    color: #e2e4e8;
+  }
+  .curiosity-room-games .room-title {
+    color: #f4f5f7;
+  }
+  .curiosity-room-games .room-desc {
+    color: #9ba1ad;
+  }
+
+  .games-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+  }
+
+  .game-card {
+    background: #20242b;
+    border: 1px solid #313742;
+    border-radius: 8px;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.2s ease;
+  }
+
+  .game-card:hover {
+    border-color: #e06c53;
+    transform: translateY(-2px);
+  }
+
+  /* Chess Tactical Board within Game Room */
+  .chess-board-card {
+    background: #1e2229;
+    border: 1px solid #3b4252;
+  }
+
+  .chess-tactical-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .chess-tag {
+    font-family: var(--mono, monospace);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: #e06c53;
+    font-weight: 600;
+  }
+
+  .chess-coords-badge {
+    font-family: var(--mono, monospace);
+    font-size: 9px;
+    color: #8c93a3;
+  }
+
+  .chess-board-notation-strip {
+    display: flex;
+    gap: 8px;
+    padding: 8px 10px;
+    background: #17191e;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    margin: 10px 0 16px 0;
+  }
+
+  .notation-chip {
+    font-family: var(--mono, monospace);
+    font-size: 11px;
+    color: #cbd5e1;
+  }
+
+  /* CRT Screen Effect for Games */
+  .crt-screen-card {
+    position: relative;
+  }
+
+  .crt-scanline-overlay {
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.15) 2px,
+      rgba(0, 0, 0, 0.15) 4px
+    );
+    pointer-events: none;
+    opacity: 0.6;
+  }
+
+  .crt-dot-indicator {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #e06c53;
+    box-shadow: 0 0 6px #e06c53;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     ROOM 06: SPORTS — The Changing Physical Venue
+     ══════════════════════════════════════════════════════════════════════════ */
+  .curiosity-room-sports {
+    background: #141f1a;
+    border-color: #24352c;
+    color: #e2f0e8;
+  }
+
+  .curiosity-room-sports .room-num {
+    background: rgba(255, 255, 255, 0.1);
+    color: #e2f0e8;
+  }
+  .curiosity-room-sports .room-title {
+    color: #f0faf4;
+  }
+  .curiosity-room-sports .room-desc {
+    color: #9cb5a8;
+  }
+
+  .sports-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+  }
+
+  .sport-venue-card {
+    background: #1c2a23;
+    border: 1px solid #2d4237;
+    border-radius: 8px;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.2s ease;
+  }
+
+  .sport-venue-card:hover {
+    border-color: #52b788;
+    transform: translateY(-2px);
+  }
+
+  .venue-chalk-motif {
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+    color: rgba(255, 255, 255, 0.35);
+  }
+
+  .chalk-field-svg {
+    width: 140px;
+    height: 50px;
+  }
+
+  .sport-status-pill.status-playing {
+    background: rgba(82, 183, 136, 0.15);
+    color: #74c69d;
+    border: 1px solid rgba(82, 183, 136, 0.3);
+  }
+
+  .sport-status-pill.status-want-to-try {
+    background: rgba(230, 111, 81, 0.15);
+    color: #f4a261;
+    border: 1px solid rgba(230, 111, 81, 0.3);
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     ROOM 07: FITNESS — Personal Training Log & Track Notebook
+     ══════════════════════════════════════════════════════════════════════════ */
+  .curiosity-room-fitness {
+    background: #faf8f5;
+    border-color: #e5dfd5;
+    position: relative;
+  }
+
+  .track-lanes-motif {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 280px;
+    height: 120px;
+    pointer-events: none;
+    opacity: 0.15;
+  }
+
+  .track-curve-line {
+    position: absolute;
+    border: 2px solid #a63a2c;
+    border-radius: 100px;
+  }
+  .track-curve-line.lane-1 { top: -40px; right: -40px; width: 200px; height: 140px; }
+  .track-curve-line.lane-2 { top: -30px; right: -30px; width: 220px; height: 160px; }
+  .track-curve-line.lane-3 { top: -20px; right: -20px; width: 240px; height: 180px; }
+
+  .stopwatch-bezel-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+
+  .bezel-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #a63a2c;
+  }
+
+  .sub-room-note {
+    font-size: 13px;
+    color: var(--text-light, #8a8880);
+    margin: 4px 0 16px 0;
+  }
+
+  .fitness-pbs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+    gap: 12px;
+  }
+
+  .stopwatch-card {
+    padding: 16px;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: transform 0.15s, border-color 0.15s;
+  }
+
+  .stopwatch-card:hover {
+    border-color: #a63a2c;
+    transform: translateY(-2px);
+  }
+
+  .pb-mono {
+    font-family: var(--mono, monospace);
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+  }
+
+  .fitness-gym-section {
+    margin-top: 40px;
+  }
+
+  .iron-weight-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+
+  .gym-records-table-wrap {
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 6px;
+    overflow-x: auto;
+  }
+
+  .gym-records-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+  }
+
+  .gym-records-table th {
+    text-align: left;
+    padding: 12px 16px;
+    font-family: var(--mono, monospace);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-light, #8a8880);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  }
+
+  .gym-records-table td {
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  }
+
+  .ex-disc-bullet {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #1f1e1c;
+    margin-right: 8px;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     ROOM 08: CHALLENGES — Expedition / Mission Board
+     ══════════════════════════════════════════════════════════════════════════ */
+  .curiosity-room-challenges {
+    background: #fbf7f0;
+    border-color: #e8ded0;
+  }
+
+  .pinned-mission-dispatch {
+    position: relative;
+    padding: 28px;
+    background: #fff;
+    border: 1px solid #dfd5c5;
+    border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+  }
+
+  .dispatch-thumbtack {
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #c59b27;
+    border: 2px solid #8e6d14;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  }
+
+  .dispatch-stamp-seal {
+    position: absolute;
+    top: 24px;
+    right: 28px;
+    border: 2px solid #b83a2c;
+    border-radius: 4px;
+    padding: 4px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transform: rotate(4deg);
+    color: #b83a2c;
+    font-family: var(--mono, monospace);
+    opacity: 0.85;
+  }
+
+  .stamp-border {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+  }
+  .stamp-sub {
+    font-size: 8px;
+  }
+
+  .mission-checkpoint-track {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 18px 0;
+    padding: 14px;
+    background: #faf8f5;
+    border-radius: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+  }
+
+  .checkpoint-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    font-family: var(--mono, monospace);
+    font-size: 10px;
+  }
+
+  .checkpoint-node.completed { color: #2d6a4f; }
+  .checkpoint-node.current { color: #b83a2c; font-weight: 700; }
+  .checkpoint-node.upcoming { color: #8a8880; }
+
+  .checkpoint-connector {
+    flex: 1;
+    height: 2px;
+    background: rgba(0, 0, 0, 0.1);
+  }
+  .checkpoint-connector.active {
+    background: #2d6a4f;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     ROOM 09: MOVIES & ANIME — Private Screening Room
+     ══════════════════════════════════════════════════════════════════════════ */
+  .curiosity-room-movies-anime {
+    background: #11100f;
+    border-color: #242220;
+    color: #edebe8;
+  }
+
+  .curiosity-room-movies-anime .room-num {
+    background: rgba(255, 255, 255, 0.1);
+    color: #edebe8;
+  }
+  .curiosity-room-movies-anime .room-title {
+    color: #faf8f5;
+  }
+  .curiosity-room-movies-anime .room-desc {
+    color: #9c9791;
+  }
+
+  .projector-cone-light {
+    position: absolute;
+    top: 0;
+    left: 20%;
+    right: 20%;
+    height: 140px;
+    background: radial-gradient(ellipse at 50% 0%, rgba(255, 235, 200, 0.05) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .media-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+  }
+
+  .film-strip-card {
+    background: #181715;
+    border: 1px solid #2d2b27;
+    border-radius: 6px;
+    display: flex;
+    overflow: hidden;
+    transition: all 0.2s ease;
+  }
+
+  .film-strip-card:hover {
+    border-color: #e5a93c;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  }
+
+  .film-sprockets {
+    width: 20px;
+    background: #12110f;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    padding: 8px 4px;
+    border-right: 1px solid #2d2b27;
+  }
+  .film-sprockets.right {
+    border-right: none;
+    border-left: 1px solid #2d2b27;
+  }
+
+  .film-sprockets span {
+    width: 10px;
+    height: 12px;
+    border-radius: 2px;
+    background: #000;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .film-cell-frame {
+    flex: 1;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .media-type-pill {
+    font-family: var(--mono, monospace);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    color: #e5a93c;
+  }
+
+  .media-curation-tag {
+    font-family: var(--mono, monospace);
+    font-size: 9px;
+    color: #7d7770;
+  }
+
+  .curiosity-room-movies-anime .media-title {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 20px;
+    font-weight: 600;
+    color: #faf8f5;
+    margin: 8px 0 6px 0;
+  }
+
+  .curiosity-room-movies-anime .media-desc {
+    font-size: 13px;
+    line-height: 1.5;
+    color: #a8a29b;
+    margin: 0 0 16px 0;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     ROOM 10: TECHNOLOGY — Personal Workbench / Laboratory
+     ══════════════════════════════════════════════════════════════════════════ */
+  .curiosity-room-technology {
+    background: #14171d;
+    border-color: #262c37;
+    color: #e2e7f0;
+  }
+
+  .curiosity-room-technology .room-num {
+    background: rgba(255, 255, 255, 0.1);
+    color: #e2e7f0;
+  }
+  .curiosity-room-technology .room-title {
+    color: #f1f5f9;
+  }
+  .curiosity-room-technology .room-desc {
+    color: #94a3b8;
+  }
+
+  .tech-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 20px;
+  }
+
+  .lab-terminal-card {
+    background: #1b2028;
+    border: 1px solid #2d3543;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.2s ease;
+  }
+
+  .lab-terminal-card:hover {
+    border-color: #38bdf8;
+    transform: translateY(-2px);
+  }
+
+  .lab-terminal-header {
+    background: #13171e;
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid #2d3543;
+  }
+
+  .terminal-dots {
+    display: flex;
+    gap: 5px;
+  }
+  .terminal-dots span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #475569;
+  }
+
+  .terminal-path {
+    font-family: var(--mono, monospace);
+    font-size: 10px;
+    color: #64748b;
+    flex: 1;
+  }
+
+  .terminal-body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+  }
+
+  .curiosity-room-technology .tech-title {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 21px;
+    font-weight: 600;
+    color: #f8fafc;
+    margin: 0 0 8px 0;
+  }
+
+  .curiosity-room-technology .tech-desc {
+    font-size: 13px;
+    line-height: 1.55;
+    color: #94a3b8;
+    margin: 0 0 16px 0;
+  }
+
+  .tech-domains-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+
+  .domain-tag {
+    font-family: var(--mono, monospace);
+    font-size: 9px;
+    padding: 2px 7px;
+    background: rgba(56, 189, 248, 0.08);
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    border-radius: 3px;
+    color: #7dd3fc;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     ROOM 11: TEMPORARY OBSESSIONS — The Living Vitrine
+     ══════════════════════════════════════════════════════════════════════════ */
+  .curiosity-room-temporary-obsessions {
+    background: #161514;
+    border-color: #2b2826;
+    color: #fcfbf9;
+    padding: 48px 36px;
+  }
+
+  .curiosity-room-temporary-obsessions .room-num {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fcfbf9;
+  }
+  .curiosity-room-temporary-obsessions .room-title {
+    color: #fff;
+  }
+  .curiosity-room-temporary-obsessions .room-desc {
+    color: #a8a29e;
+  }
+
+  .vitrine-gallery-room {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    padding: 40px 16px;
+  }
+
+  .vitrine-spotlight-beam {
+    position: absolute;
+    top: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 320px;
+    height: 380px;
+    background: radial-gradient(ellipse at 50% 0%, rgba(255, 245, 220, 0.14) 0%, rgba(255, 245, 220, 0.02) 60%, transparent 80%);
+    pointer-events: none;
+  }
+
+  .vitrine-pedestal-display {
+    max-width: 580px;
+    width: 100%;
+    position: relative;
+    z-index: 2;
+  }
+
+  .vitrine-glass-hood {
+    height: 120px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  .vitrine-specimen-symbol {
+    font-size: 28px;
+    color: #d4af37;
+    opacity: 0.8;
+    filter: drop-shadow(0 0 10px rgba(212, 175, 55, 0.4));
+  }
+
+  .vitrine-pedestal-base {
+    background: #242220;
+    border: 1px solid #3d3936;
+    border-radius: 0 0 8px 8px;
+    padding: 28px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  }
+
+  .vitrine-brass-plaque {
+    position: relative;
+    background: linear-gradient(135deg, #2b2824, #1f1d1a);
+    border: 1px solid #5a5044;
+    border-radius: 4px;
+    padding: 22px 24px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .plaque-corner {
+    position: absolute;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #d4af37;
+    border: 1px solid #2b2824;
+  }
+  .plaque-corner.tl { top: 6px; left: 6px; }
+  .plaque-corner.tr { top: 6px; right: 6px; }
+  .plaque-corner.bl { bottom: 6px; left: 6px; }
+  .plaque-corner.br { bottom: 6px; right: 6px; }
+
+  .plaque-accession-no {
+    font-family: var(--mono, monospace);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    color: #c4a77d;
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .plaque-title {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 22px;
+    font-weight: 600;
+    color: #f5eedb;
+    margin: 0 0 10px 0;
+  }
+
+  .plaque-statement {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 15.5px;
+    font-style: italic;
+    line-height: 1.6;
+    color: #dfd8cb;
+    margin: 0 0 18px 0;
+  }
+
+  .plaque-status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono, monospace);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: #c4a77d;
+  }
+
+  .pulse-beacon {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #50e3c2;
+    box-shadow: 0 0 8px #50e3c2;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     FOOTER & RESPONSIVE ADJUSTMENTS
+     ══════════════════════════════════════════════════════════════════════════ */
+  .interests-footer {
+    margin-top: 60px;
+    padding-top: 30px;
+    border-top: 1px solid var(--line, rgba(0, 0, 0, 0.12));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .interests-footer-label {
+    font-family: var(--serif, Georgia, serif);
+    font-style: italic;
+    font-size: 16px;
+    color: var(--text-light, #8a8880);
+    margin: 0;
+  }
+
+  .interests-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+  }
+
+  .interests-links a {
+    font-family: var(--mono, monospace);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-decoration: none;
+    color: var(--text-light, #8a8880);
+    transition: color 0.15s;
+  }
+
+  .interests-links a:hover {
+    color: var(--ink, #1f1e1c);
+  }
+
+  @media (max-width: 768px) {
+    .curiosity-room {
+      padding: 24px 18px;
+    }
+
+    .interests-title {
+      font-size: 34px;
+    }
+
+    .record-row-item {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .record-status-strip {
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .machine-blueprint-viewport {
+      height: 80px;
+    }
+
+    .chassis-spec-plate {
+      padding: 10px;
+    }
+
+    .pinned-mission-dispatch {
+      padding: 20px 16px;
+    }
+
+    .dispatch-stamp-seal {
+      position: static;
+      transform: none;
+      margin-bottom: 14px;
+      display: inline-flex;
+    }
+
+    .vitrine-pedestal-base {
+      padding: 18px 14px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .curiosity-room *,
+    .curiosity-room *::before,
+    .curiosity-room *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 </style>
+
