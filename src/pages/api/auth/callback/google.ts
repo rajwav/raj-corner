@@ -4,7 +4,8 @@ import {
   createOwnerSession, 
   buildSessionCookieString, 
   getOwnerEmail,
-  getOAuthRedirectUri
+  getOAuthRedirectUri,
+  buildOAuthStateClearCookieString
 } from '../../../../lib/access-control/auth';
 
 export const prerender = false;
@@ -56,7 +57,7 @@ export const GET: APIRoute = async ({ request, redirect, url }) => {
   // 3. Verify CSRF state against oauth_state cookie
   const cookieHeader = request.headers.get('cookie') || '';
   const match = cookieHeader.match(/(?:^|;\s*)oauth_state=([^;]+)/);
-  const cookieState = match ? match[1] : null;
+  const cookieState = match ? decodeURIComponent(match[1].trim()) : null;
 
   if (!cookieState || cookieState !== state) {
     return new Response(JSON.stringify({ error: 'Invalid OAuth state (CSRF verification failed)' }), {
@@ -140,7 +141,7 @@ export const GET: APIRoute = async ({ request, redirect, url }) => {
 
   const res = redirect(redirectTarget);
   res.headers.set('Set-Cookie', sessionCookie);
-  // Clear the state cookie
-  res.headers.append('Set-Cookie', 'oauth_state=; Path=/; Max-Age=0; HttpOnly');
+  // Clear the state cookie with matching security attributes
+  res.headers.append('Set-Cookie', buildOAuthStateClearCookieString(url));
   return res;
 };

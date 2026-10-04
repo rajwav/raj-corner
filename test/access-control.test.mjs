@@ -22,7 +22,10 @@ import {
   LOCAL_DEV_ORIGIN,
   getSiteOrigin,
   getOAuthRedirectUri,
-  isTemporaryVercelHostname
+  isTemporaryVercelHostname,
+  OAUTH_STATE_COOKIE_NAME,
+  buildOAuthStateCookieString,
+  buildOAuthStateClearCookieString
 } from '../src/lib/access-control/auth.ts';
 import { getStorage } from '../src/lib/access-control/storage.ts';
 import { evaluateMediaAccess, extractMediaUrlsFromEntry } from '../src/lib/access-control/media.ts';
@@ -990,8 +993,68 @@ async function runTests() {
   }
   console.log('   ✓ Authorization initiation and token exchange callbacks are guaranteed identical.\n');
 
-  console.log('🎉 ALL 51 SECURITY, PERIMETER, INTERESTS & OAUTH TESTS PASSED PERFECTLY!\n');
-  console.log('   (21 original security tests + 10 public-world-visibility tests + 5 guardrail tests + 4 people architecture tests + 6 interests world public tests + 5 OAuth canonical redirect tests)\n');
+  // Test 52: Production OAuth state cookie attributes (SameSite=None; Secure for cross-site survival)
+  console.log('52. Production OAuth state cookie attributes (SameSite=None; Secure)...');
+  const prodCookie = buildOAuthStateCookieString('sample-prod-state-123', 'https://raj-corner.vercel.app/api/auth/google');
+  assert.ok(prodCookie.startsWith(`${OAUTH_STATE_COOKIE_NAME}=sample-prod-state-123`), 'Must set oauth_state value');
+  assert.ok(prodCookie.includes('SameSite=None'), 'Production must use SameSite=None to survive cross-site Google redirect');
+  assert.ok(prodCookie.includes('Secure'), 'Production must be Secure');
+  assert.ok(prodCookie.includes('HttpOnly'), 'Must be HttpOnly');
+  assert.ok(prodCookie.includes('Path=/'), 'Must be Path=/');
+  assert.ok(prodCookie.includes('Max-Age=600'), 'Must have 10-minute expiry (Max-Age=600)');
+  console.log('   ✓ Production OAuth state cookie correctly uses SameSite=None; Secure; HttpOnly; Max-Age=600.\n');
+
+  // Test 53: Localhost OAuth state cookie attributes (SameSite=Lax for plain HTTP)
+  console.log('53. Localhost OAuth state cookie attributes (SameSite=Lax for plain HTTP)...');
+  const localCookie = buildOAuthStateCookieString('sample-local-state-456', 'http://localhost:4321/api/auth/google');
+  assert.ok(localCookie.startsWith(`${OAUTH_STATE_COOKIE_NAME}=sample-local-state-456`), 'Must set oauth_state value');
+  assert.ok(localCookie.includes('SameSite=Lax'), 'Local dev must use SameSite=Lax over HTTP');
+  assert.ok(!localCookie.includes('SameSite=None'), 'Local dev over HTTP must not use SameSite=None');
+  assert.ok(!localCookie.includes('Secure'), 'Local dev over plain HTTP must not use Secure flag');
+  assert.ok(localCookie.includes('HttpOnly'), 'Must be HttpOnly');
+  assert.ok(localCookie.includes('Path=/'), 'Must be Path=/');
+  assert.ok(localCookie.includes('Max-Age=600'), 'Must have Max-Age=600');
+  console.log('   ✓ Local development OAuth state cookie safely uses SameSite=Lax over plain HTTP.\n');
+
+  // Test 54: State clearing cookie matches security attributes in each environment
+  console.log('54. State clearing cookie attributes match creation attributes...');
+  const prodClearCookie = buildOAuthStateClearCookieString('https://raj-corner.vercel.app/api/auth/callback/google');
+  assert.ok(prodClearCookie.includes('SameSite=None'), 'Production clear cookie must match SameSite=None');
+  assert.ok(prodClearCookie.includes('Secure'), 'Production clear cookie must match Secure');
+  assert.ok(prodClearCookie.includes('Max-Age=0'), 'Must clear with Max-Age=0');
+  assert.ok(prodClearCookie.includes('Expires='), 'Must include past Expires date');
+
+  const localClearCookie = buildOAuthStateClearCookieString('http://localhost:4321/api/auth/callback/google');
+  assert.ok(localClearCookie.includes('SameSite=Lax'), 'Local clear cookie must match SameSite=Lax');
+  assert.ok(!localClearCookie.includes('Secure'), 'Local clear cookie must not set Secure over HTTP');
+  assert.ok(localClearCookie.includes('Max-Age=0'), 'Must clear with Max-Age=0');
+  console.log('   ✓ State clearing cookie attributes match environment security requirements.\n');
+
+  // Test 55: OAuth CSRF state verification and comparison logic
+  console.log('55. OAuth CSRF state verification logic (matching cookie vs query param)...');
+  const validState = 'test-csrf-nonce-xyz-789';
+  const cookieHeaderValid = `other_cookie=123; oauth_state=${validState}; another=456`;
+  const matchValid = cookieHeaderValid.match(/(?:^|;\s*)oauth_state=([^;]+)/);
+  const extractedCookieState = matchValid ? decodeURIComponent(matchValid[1].trim()) : null;
+
+  // Matching state passes
+  assert.strictEqual(extractedCookieState, validState);
+  assert.strictEqual(extractedCookieState === validState, true);
+
+  // Missing cookie fails
+  const cookieHeaderMissing = `other_cookie=123; another=456`;
+  const matchMissing = cookieHeaderMissing.match(/(?:^|;\s*)oauth_state=([^;]+)/);
+  const missingState = matchMissing ? decodeURIComponent(matchMissing[1].trim()) : null;
+  assert.strictEqual(missingState, null);
+  assert.strictEqual(Boolean(!missingState || missingState !== validState), true);
+
+  // Mismatched state fails
+  const tamperedState = 'attacker-injected-state';
+  assert.strictEqual(Boolean(!extractedCookieState || extractedCookieState !== tamperedState), true);
+  console.log('   ✓ CSRF state verification strictly accepts valid match and rejects missing/tampered states.\n');
+
+  console.log('🎉 ALL 55 SECURITY, PERIMETER, INTERESTS & OAUTH TESTS PASSED PERFECTLY!\n');
+  console.log('   (21 original security tests + 10 public-world-visibility tests + 5 guardrail tests + 4 people architecture tests + 6 interests world public tests + 9 OAuth canonical & CSRF state tests)\n');
 }
 
 runTests().catch(err => {

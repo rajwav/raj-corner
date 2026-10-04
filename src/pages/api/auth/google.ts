@@ -1,5 +1,10 @@
 import type { APIRoute } from 'astro';
-import { getOAuthRedirectUri } from '../../../lib/access-control/auth';
+import { 
+  getOAuthRedirectUri, 
+  buildOAuthStateCookieString, 
+  isTemporaryVercelHostname, 
+  CANONICAL_SITE_URL 
+} from '../../../lib/access-control/auth';
 
 export const prerender = false;
 
@@ -14,6 +19,12 @@ export const GET: APIRoute = async ({ request, redirect, url }) => {
     const mockVerified = url.searchParams.get('mock_verified') !== 'false';
     const mockCallback = `/api/auth/callback/google?mock=true&email=${encodeURIComponent(mockEmail)}&name=${encodeURIComponent(mockName)}&email_verified=${mockVerified}&redirect=${encodeURIComponent(redirectTarget)}`;
     return redirect(mockCallback);
+  }
+
+  // If request hits a temporary preview Vercel domain, redirect to canonical origin
+  // so the oauth_state cookie is set on the exact domain that receives the callback.
+  if (isTemporaryVercelHostname(url.hostname)) {
+    return redirect(`${CANONICAL_SITE_URL}/api/auth/google${url.search}`);
   }
 
   if (!clientId) {
@@ -45,10 +56,6 @@ export const GET: APIRoute = async ({ request, redirect, url }) => {
   googleUrl.searchParams.set('prompt', 'select_account');
 
   const response = redirect(googleUrl.toString());
-  const isProd = import.meta.env.PROD;
-  response.headers.set(
-    'Set-Cookie',
-    `oauth_state=${state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${isProd ? '; Secure' : ''}`
-  );
+  response.headers.set('Set-Cookie', buildOAuthStateCookieString(state, url));
   return response;
 };

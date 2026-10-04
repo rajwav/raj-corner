@@ -222,6 +222,55 @@ export function buildLogoutCookieString(): string {
   return `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`;
 }
 
+export const OAUTH_STATE_COOKIE_NAME = 'oauth_state';
+
+/**
+ * Builds the Set-Cookie header string for oauth_state.
+ * 
+ * In production (HTTPS / remote origin):
+ * Uses `SameSite=None; Secure; HttpOnly; Path=/; Max-Age=600` so that
+ * the state cookie survives the cross-site redirect round-trip from Google (accounts.google.com).
+ * 
+ * In local development (HTTP):
+ * Browsers reject `SameSite=None` without `Secure` and reject `Secure` over HTTP.
+ * Local dev uses `SameSite=Lax; HttpOnly; Path=/; Max-Age=600`.
+ */
+export function buildOAuthStateCookieString(state: string, requestUrl?: URL | string): string {
+  const origin = getSiteOrigin(requestUrl);
+  let isLocal = false;
+  try {
+    const parsed = new URL(origin);
+    isLocal = isLocalhost(parsed.hostname) && parsed.protocol === 'http:';
+  } catch {
+    isLocal = false;
+  }
+
+  if (!isLocal) {
+    return `${OAUTH_STATE_COOKIE_NAME}=${encodeURIComponent(state)}; Path=/; HttpOnly; SameSite=None; Secure; Max-Age=600`;
+  }
+  return `${OAUTH_STATE_COOKIE_NAME}=${encodeURIComponent(state)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600`;
+}
+
+/**
+ * Builds the Set-Cookie header string to clear oauth_state upon callback completion.
+ * Matches the security attributes used during cookie creation.
+ */
+export function buildOAuthStateClearCookieString(requestUrl?: URL | string): string {
+  const origin = getSiteOrigin(requestUrl);
+  let isLocal = false;
+  try {
+    const parsed = new URL(origin);
+    isLocal = isLocalhost(parsed.hostname) && parsed.protocol === 'http:';
+  } catch {
+    isLocal = false;
+  }
+
+  if (!isLocal) {
+    return `${OAUTH_STATE_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=None; Secure; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+  }
+  return `${OAUTH_STATE_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+}
+
 export function isOwnerSession(session: UserSession | null | undefined): boolean {
   if (!session) return false;
   const ownerEmail = getOwnerEmail();
