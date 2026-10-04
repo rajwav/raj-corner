@@ -1,0 +1,340 @@
+---
+import type { AccessEvaluation, UserSession } from '../lib/access-control/types';
+
+interface Props {
+  evaluation: AccessEvaluation;
+  resourcePath: string;
+  worldSlug?: string;
+  resourceTitle?: string;
+  session?: UserSession | null;
+}
+
+const { evaluation, resourcePath, worldSlug, resourceTitle, session } = Astro.props;
+const currentUrl = Astro.url.pathname;
+const redirectParam = encodeURIComponent(currentUrl);
+---
+
+<div class="access-gate-container">
+  <div class="access-gate-card">
+    <div class="access-gate-eyebrow">Raj's Corner · Archive Perimeter</div>
+
+    {evaluation.visibility === 'absolute_private' ? (
+      <div class="gate-content">
+        <h1 class="gate-title">THIS PAGE IS PRIVATE.</h1>
+        <p class="gate-lede">Access requests are not available for this page.</p>
+        <div class="gate-actions">
+          <a href="/" class="gate-btn-secondary">← Return to the universe</a>
+        </div>
+      </div>
+    ) : evaluation.reason === 'unauthenticated' ? (
+      <div class="gate-content">
+        <h1 class="gate-title">THIS PART OF RAJ'S CORNER IS PRIVATE.</h1>
+        <p class="gate-lede">You don't currently have access to this page.</p>
+        <div class="gate-actions">
+          <a href={`/login?redirect=${redirectParam}`} class="gate-btn-primary">Log In</a>
+          <a href="/" class="gate-btn-secondary">← Back to Universe</a>
+        </div>
+      </div>
+    ) : evaluation.reason === 'pending' ? (
+      <div class="gate-content">
+        <div class="gate-status-pill">Pending Review</div>
+        <h1 class="gate-title">ACCESS REQUESTED</h1>
+        <p class="gate-lede">Raj has received your request.</p>
+        <p class="gate-subtext">
+          Logged in as <strong>{session?.email}</strong>. When approved, this page will open automatically for you.
+        </p>
+        <div class="gate-actions">
+          <a href="/" class="gate-btn-secondary">← Return to the universe</a>
+        </div>
+      </div>
+    ) : evaluation.reason === 'rejected' ? (
+      <div class="gate-content">
+        <h1 class="gate-title">REQUEST DECLINED</h1>
+        <p class="gate-lede">Access was not granted for this page.</p>
+        <div class="gate-actions">
+          <a href="/" class="gate-btn-secondary">← Return to the universe</a>
+        </div>
+      </div>
+    ) : (
+      <div class="gate-content">
+        <h1 class="gate-title">THIS PART OF RAJ'S CORNER IS PRIVATE.</h1>
+        <p class="gate-lede">You don't currently have access to this page.</p>
+        
+        <div class="gate-user-banner">
+          <span>Signed in as <strong>{session?.name || session?.email}</strong> ({session?.email})</span>
+          <form method="POST" action="/api/auth/logout" style="display:inline;">
+            <input type="hidden" name="redirect" value={currentUrl} />
+            <button type="submit" class="gate-logout-link">Log out</button>
+          </form>
+        </div>
+
+        <form id="access-request-form" class="gate-form" method="POST" action="/api/access/request">
+          <input type="hidden" name="resourcePath" value={resourcePath} />
+          <input type="hidden" name="worldSlug" value={worldSlug || ''} />
+          <input type="hidden" name="redirect" value={currentUrl} />
+
+          <div class="gate-scope-picker">
+            <span class="gate-label">Choose Request Scope</span>
+            <div class="gate-radio-group">
+              <label class="gate-radio-option">
+                <input type="radio" name="scope" value="page" checked />
+                <div>
+                  <strong>This Page only</strong>
+                  <small>{resourceTitle || resourcePath}</small>
+                </div>
+              </label>
+
+              {worldSlug && (
+                <label class="gate-radio-option">
+                  <input type="radio" name="scope" value="world" />
+                  <div>
+                    <strong>This Entire World</strong>
+                    <small>All entries in the {worldSlug.toUpperCase()} world</small>
+                  </div>
+                </label>
+              )}
+
+              <label class="gate-radio-option">
+                <input type="radio" name="scope" value="site" />
+                <div>
+                  <strong>Entire Universe</strong>
+                  <small>Full access across all private entries</small>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <label class="gate-note-field">
+            <span class="gate-label">Note for Raj <small>(optional)</small></span>
+            <textarea name="note" rows="2" placeholder="Say who you are or why you'd like to read this..."></textarea>
+          </label>
+
+          <div class="gate-actions">
+            <button type="submit" class="gate-btn-primary">Request Access</button>
+            <a href="/" class="gate-btn-secondary">← Back</a>
+          </div>
+          <p id="gate-message" role="status" class="gate-form-message"></p>
+        </form>
+      </div>
+    )}
+  </div>
+</div>
+
+<style>
+  .access-gate-container {
+    min-height: 80vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 1.5rem;
+    font-family: var(--sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+  }
+
+  .access-gate-card {
+    width: 100%;
+    max-width: 580px;
+    background: var(--paper, #fdfbf7);
+    border: 1px solid var(--line, rgba(0, 0, 0, 0.12));
+    border-radius: 6px;
+    padding: 3rem 2.5rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
+  }
+
+  .access-gate-eyebrow {
+    font-family: var(--mono, monospace);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-light, #8a8880);
+    margin-bottom: 2rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--line, rgba(0, 0, 0, 0.08));
+  }
+
+  .gate-title {
+    font-family: var(--serif, "Fraunces", Georgia, serif);
+    font-size: clamp(1.4rem, 4vw, 1.85rem);
+    font-weight: 500;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    color: var(--ink, #1f1e1c);
+    margin: 0 0 1rem;
+    text-transform: uppercase;
+  }
+
+  .gate-lede {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 1.15rem;
+    line-height: 1.6;
+    color: var(--text, #44423e);
+    margin: 0 0 1.75rem;
+  }
+
+  .gate-subtext {
+    font-size: 0.88rem;
+    color: var(--text-light, #73716a);
+    line-height: 1.5;
+    margin: 0 0 2rem;
+  }
+
+  .gate-status-pill {
+    display: inline-block;
+    padding: 0.25rem 0.65rem;
+    background: #fef3c7;
+    color: #92400e;
+    border-radius: 999px;
+    font-family: var(--mono, monospace);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 1rem;
+  }
+
+  .gate-user-banner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.03);
+    border: 1px solid var(--line, rgba(0, 0, 0, 0.08));
+    border-radius: 4px;
+    padding: 0.6rem 0.9rem;
+    font-size: 0.82rem;
+    color: var(--text, #44423e);
+    margin-bottom: 1.75rem;
+  }
+
+  .gate-logout-link {
+    background: none;
+    border: none;
+    padding: 0;
+    color: #b91c1c;
+    font-family: var(--mono, monospace);
+    font-size: 0.72rem;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  .gate-scope-picker {
+    margin-bottom: 1.5rem;
+  }
+
+  .gate-label {
+    display: block;
+    font-family: var(--mono, monospace);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-light, #73716a);
+    margin-bottom: 0.5rem;
+  }
+
+  .gate-radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .gate-radio-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+    border-radius: 4px;
+    background: #ffffff;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+
+  .gate-radio-option:hover {
+    border-color: var(--ink, #1f1e1c);
+  }
+
+  .gate-radio-option input {
+    margin-top: 0.2rem;
+  }
+
+  .gate-radio-option strong {
+    display: block;
+    font-size: 0.88rem;
+    color: var(--ink, #1f1e1c);
+  }
+
+  .gate-radio-option small {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-light, #73716a);
+    margin-top: 0.15rem;
+  }
+
+  .gate-note-field {
+    display: block;
+    margin-bottom: 2rem;
+  }
+
+  .gate-note-field textarea {
+    width: 100%;
+    padding: 0.65rem 0.85rem;
+    font-family: var(--sans, sans-serif);
+    font-size: 0.88rem;
+    border: 1px solid var(--line, rgba(0, 0, 0, 0.15));
+    border-radius: 4px;
+    background: #ffffff;
+    color: var(--ink, #1f1e1c);
+    resize: vertical;
+    box-sizing: border-box;
+  }
+
+  .gate-actions {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+  }
+
+  .gate-btn-primary {
+    display: inline-block;
+    padding: 0.75rem 1.6rem;
+    background: var(--ink, #1f1e1c);
+    color: #fdfbf7;
+    border: none;
+    border-radius: 4px;
+    font-family: var(--mono, monospace);
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-decoration: none;
+    cursor: pointer;
+    transition: opacity 0.15s ease, transform 0.1s ease;
+  }
+
+  .gate-btn-primary:hover {
+    opacity: 0.88;
+  }
+
+  .gate-btn-primary:active {
+    transform: scale(0.98);
+  }
+
+  .gate-btn-secondary {
+    display: inline-block;
+    padding: 0.75rem 1.25rem;
+    background: transparent;
+    color: var(--text-light, #73716a);
+    border: 1px solid var(--line, rgba(0, 0, 0, 0.15));
+    border-radius: 4px;
+    font-family: var(--mono, monospace);
+    font-size: 0.75rem;
+    text-decoration: none;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .gate-btn-secondary:hover {
+    color: var(--ink, #1f1e1c);
+    border-color: var(--ink, #1f1e1c);
+  }
+
+  .gate-form-message {
+    margin-top: 1rem;
+    font-size: 0.82rem;
+  }
+</style>

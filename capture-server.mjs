@@ -71,6 +71,8 @@ function markdown(data) {
     `tags: ${list(data.tags)}`, `description: ${escapeYaml(data.description || (data.artist ? `${data.title} by ${data.artist}` : '') || data.story?.split('\n')[0] || data.title)}`,
     `related: ${list(data.related)}`, data.people?.length ? `people: ${list(data.people)}` : '', data.cover ? `cover: ${escapeYaml(data.cover)}` : '',
     `status: ${data.status || 'past'}`, `featured: ${Boolean(data.featured)}`, `accent: ${accents[data.type] || 'sand'}`,
+    data.visibility && data.visibility !== 'public' ? `visibility: ${data.visibility}` : '',
+    data.allowRequests === false ? `allowRequests: false` : '',
     data.presentation && Object.keys(data.presentation).length > 0 ? `presentation: ${JSON.stringify(data.presentation)}` : ''
   ].filter(Boolean).join('\n');
   const image = '';

@@ -22,6 +22,11 @@ const entrySchema = z.object({
   featured: z.boolean().default(false),
   status: z.enum(['past', 'now', 'future']).default('past'),
   accent: z.enum(['coral', 'sky', 'lime', 'night', 'sand']).default('sand'),
+  // Omitted visibility is deliberately private. `public` must be written in
+  // frontmatter by the owner, so existing content never becomes public by
+  // accident when the access policy changes.
+  visibility: z.enum(['public', 'private', 'absolute_private']).optional(),
+  allowRequests: z.boolean().default(true),
   presentation: z.object({
     layout: z.object({
       mode: z.enum(['default', 'editorial', 'centered', 'split', 'immersive']).optional()

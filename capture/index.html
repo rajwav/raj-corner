@@ -149,6 +149,24 @@
       </div>
     </details>
 
+    <details style="margin-bottom:16px; border:1px solid var(--line); border-radius:4px; padding:12px;">
+      <summary style="font-family:var(--mono); font-size:11px; text-transform:uppercase; cursor:pointer; font-weight:600;">Access Control · Visibility</summary>
+      <div style="margin-top:12px;">
+        <label style="display:block; margin-bottom:12px;">
+          <span style="font-family:var(--mono); font-size:11px; text-transform:uppercase; display:block; margin-bottom:4px;">Visibility State</span>
+          <select id="setup-visibility" name="visibility" style="width:100%; padding:8px; border:1px solid var(--line); border-radius:4px; font-family:var(--mono); font-size:12px;">
+            <option value="public" selected>Public · Anyone can view without logging in</option>
+            <option value="private">Private · Approved visitors only (login & request access)</option>
+            <option value="absolute_private">Absolute Private · Only Raj (owner) can view</option>
+          </select>
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;" id="allow-requests-row">
+          <input type="checkbox" name="allowRequests" id="setup-allow-requests" checked>
+          <span style="font-family:var(--mono); font-size:11px;">Allow logged-in visitors to request access (for Private entries)</span>
+        </label>
+      </div>
+    </details>
+
     <label class="image-upload" style="margin-bottom:24px;"><span>Cover Photograph / Artwork</span> <input type="file" id="image" accept="image/*"><small id="image-status">Optional. Will be saved locally.</small></label>
 
     <div class="actions" style="display:flex; justify-content:space-between; align-items:center;">
@@ -197,7 +215,15 @@
         <option value="immersive">Immersive</option>
       </select>
     </label>
-    <p style="font-size:11px; color:var(--text-light); margin:0;">More settings (Title, Description, Cover) can be added here in the future.</p>
+    <label style="display:block; margin-bottom:12px;">
+      <span style="font-size:11px; font-family:var(--mono); display:block; margin-bottom:4px;">Visibility State</span>
+      <select id="canvas-visibility-select" style="width:100%; padding:6px; font-family:var(--mono); font-size:11px;">
+        <option value="public">Public</option>
+        <option value="private">Private</option>
+        <option value="absolute_private">Absolute Private</option>
+      </select>
+    </label>
+    <p style="font-size:11px; color:var(--text-light); margin:0;">More settings can be adjusted in Capture setup.</p>
   </div>
 
   <link rel="stylesheet" href="/global.css">

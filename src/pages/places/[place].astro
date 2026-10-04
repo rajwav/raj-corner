@@ -1,16 +1,23 @@
 ---
+export const prerender = false;
+
 import Base from '../../layouts/Base.astro';
 import { entries, niceDate, placeSlug } from '../../lib/universe';
+import { filterVisibleEntries } from '../../lib/access-control/policy';
 
+const placeParam = Astro.params.place;
+const session = Astro.locals.session ?? null;
 
-export async function getStaticPaths() {
-  const all = await entries();
-  const places = [...new Set(all.map(x => x.data.location).filter(Boolean))];
-  return places.map(place => ({ params: { place: placeSlug(String(place)) }, props: { place: String(place) } }));
+const rawAll = await entries();
+const all = await filterVisibleEntries(rawAll, session);
+
+// Find place matching the slug
+const allPlaces = [...new Set(all.map(x => x.data.location).filter(Boolean))];
+const place = allPlaces.find(p => placeSlug(String(p)) === placeParam);
+
+if (!place) {
+  return new Response(null, { status: 404, statusText: 'Not Found' });
 }
-
-const { place } = Astro.props;
-const all = await entries();
 
 const explicitEntries = all.filter(x => x.data.location === place);
 

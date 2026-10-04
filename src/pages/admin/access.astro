@@ -1,0 +1,748 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getSessionFromCookies, isOwnerSession } from '../../lib/access-control/auth';
+import { getStorage } from '../../lib/access-control/storage';
+
+export const prerender = false;
+
+const session = getSessionFromCookies(Astro.request.headers.get('cookie'));
+if (!isOwnerSession(session)) {
+  return Astro.redirect(`/login?redirect=${encodeURIComponent(Astro.url.pathname)}`);
+}
+
+const storage = getStorage();
+const allRequests = await storage.getRequests();
+const pendingRequests = allRequests.filter(r => r.status === 'pending');
+const pastRequests = allRequests.filter(r => r.status !== 'pending');
+
+const allGrants = await storage.getGrants();
+const activeGrants = allGrants.filter(g => g.status === 'active');
+const revokedGrants = allGrants.filter(g => g.status === 'revoked');
+
+const visibilityOverrides = await storage.getVisibilityOverrides();
+
+const urlParams = Astro.url.searchParams;
+const requestStatusFilter = urlParams.get('status') || 'all';
+const requestScopeFilter = urlParams.get('scope') || 'all';
+const requestHistory = allRequests.filter(request =>
+  (requestStatusFilter === 'all' || request.status === requestStatusFilter) &&
+  (requestScopeFilter === 'all' || request.requestedScope === requestScopeFilter)
+);
+const approvedMsg = urlParams.get('approved');
+const rejectedMsg = urlParams.get('rejected');
+const revokedMsg = urlParams.get('revoked');
+const grantedMsg = urlParams.get('granted');
+---
+
+<Base title="Access Control Panel · Raj's Corner">
+  <div class="admin-wrapper">
+    <header class="admin-header">
+      <div class="admin-header-lead">
+        <span class="admin-badge">✦ Owner Administration</span>
+        <h1 class="admin-title">Access Perimeter</h1>
+        <p class="admin-desc">Manage who can see private fragments, field notes, and worlds in your archive.</p>
+      </div>
+
+      <div class="admin-quick-stats">
+        <div class="stat-box">
+          <span class="stat-number">{pendingRequests.length}</span>
+          <span class="stat-label">Pending</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-number">{activeGrants.length}</span>
+          <span class="stat-label">Active Readers</span>
+        </div>
+      </div>
+    </header>
+
+    {approvedMsg && <div class="admin-banner success">✓ Approved access for {approvedMsg}</div>}
+    {rejectedMsg && <div class="admin-banner danger">✕ Rejected request from {rejectedMsg}</div>}
+    {revokedMsg && <div class="admin-banner info">● Access grant revoked</div>}
+    {grantedMsg && <div class="admin-banner success">✓ Direct grant created for {grantedMsg}</div>}
+
+    <main class="admin-grid">
+      <!-- ─── 1. PENDING REQUESTS ─────────────────────────────────────────── -->
+      <section class="admin-section requests-section">
+        <div class="section-title-row">
+          <h2 class="section-title">Pending Access Requests</h2>
+          <span class="section-count">{pendingRequests.length}</span>
+        </div>
+
+        {pendingRequests.length === 0 ? (
+          <p class="admin-empty">No pending requests right now. Your archive perimeter is quiet.</p>
+        ) : (
+          <div class="requests-list">
+            {pendingRequests.map(req => (
+              <article class="request-card">
+                <div class="req-header">
+                  <div>
+                    <h3 class="req-name">{req.userName}</h3>
+                    <span class="req-email">{req.userEmail}</span>
+                  </div>
+                  <span class="req-date">{new Date(req.createdAt).toLocaleDateString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+
+                <div class="req-target">
+                  <span class="req-target-label">Requested:</span>
+                  <code class="req-target-path">{req.resourcePath}</code>
+                  <span class="req-scope-badge">Scope: {req.requestedScope.toUpperCase()}</span>
+                </div>
+
+                {req.note && (
+                  <blockquote class="req-note">"{req.note}"</blockquote>
+                )}
+
+                <div class="req-actions">
+                  <!-- Approve Page -->
+                  <form method="POST" action="/api/access/manage" class="inline-form">
+                    <input type="hidden" name="action" value="approve" />
+                    <input type="hidden" name="requestId" value={req.id} />
+                    <input type="hidden" name="scope" value="page" />
+                    <button type="submit" class="btn-approve">Approve (This Page)</button>
+                  </form>
+
+                  <!-- Approve World (if available) -->
+                  {req.worldSlug && (
+                    <form method="POST" action="/api/access/manage" class="inline-form">
+                      <input type="hidden" name="action" value="approve" />
+                      <input type="hidden" name="requestId" value={req.id} />
+                      <input type="hidden" name="scope" value="world" />
+                      <button type="submit" class="btn-approve-secondary">Approve World ({req.worldSlug})</button>
+                    </form>
+                  )}
+
+                  <!-- Approve Site -->
+                  <form method="POST" action="/api/access/manage" class="inline-form">
+                    <input type="hidden" name="action" value="approve" />
+                    <input type="hidden" name="requestId" value={req.id} />
+                    <input type="hidden" name="scope" value="site" />
+                    <button type="submit" class="btn-approve-secondary">Approve Entire Site</button>
+                  </form>
+
+                  <!-- Reject -->
+                  <form method="POST" action="/api/access/manage" class="inline-form">
+                    <input type="hidden" name="action" value="reject" />
+                    <input type="hidden" name="requestId" value={req.id} />
+                    <button type="submit" class="btn-reject">Reject</button>
+                  </form>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section class="admin-section request-history-section">
+        <div class="section-title-row"><h2 class="section-title">Request History</h2><span class="section-count">{requestHistory.length}</span></div>
+        <form method="GET" class="form-row" style="margin-bottom:1rem">
+          <label><span>Status</span><select name="status"><option value="all" selected={requestStatusFilter === 'all'}>All</option><option value="pending" selected={requestStatusFilter === 'pending'}>Pending</option><option value="approved" selected={requestStatusFilter === 'approved'}>Approved</option><option value="rejected" selected={requestStatusFilter === 'rejected'}>Rejected</option><option value="revoked" selected={requestStatusFilter === 'revoked'}>Revoked</option></select></label>
+          <label><span>Scope</span><select name="scope"><option value="all" selected={requestScopeFilter === 'all'}>All</option><option value="page" selected={requestScopeFilter === 'page'}>Page</option><option value="world" selected={requestScopeFilter === 'world'}>World</option><option value="site" selected={requestScopeFilter === 'site'}>Site</option></select></label>
+          <button type="submit" class="btn-save-sm">Filter</button>
+        </form>
+        {requestHistory.length === 0 ? <p class="admin-empty">No requests match these filters.</p> : <div class="grants-table-wrapper"><table class="grants-table"><thead><tr><th>Requester</th><th>Scope / target</th><th>Status</th><th>Requested</th><th>Reviewed</th></tr></thead><tbody>{requestHistory.map(req => <tr><td><strong>{req.userName}</strong><span class="table-sub">{req.userEmail}</span></td><td><span class="scope-pill">{req.requestedScope}</span><code>{req.requestedScope === 'world' ? req.worldSlug : req.requestedScope === 'site' ? '*' : req.resourcePath}</code></td><td>{req.status}</td><td class="table-date">{new Date(req.createdAt).toLocaleString()}</td><td class="table-date">{req.reviewedAt ? new Date(req.reviewedAt).toLocaleString() : '—'}</td></tr>)}</tbody></table></div>}
+      </section>
+
+      <!-- ─── 2. ACTIVE GRANTS ────────────────────────────────────────────── -->
+      <section class="admin-section grants-section">
+        <div class="section-title-row">
+          <h2 class="section-title">Approved Readers & Grants</h2>
+          <span class="section-count">{activeGrants.length}</span>
+        </div>
+
+        {activeGrants.length === 0 ? (
+          <p class="admin-empty">No active approved readers yet.</p>
+        ) : (
+          <div class="grants-table-wrapper">
+            <table class="grants-table">
+              <thead>
+                <tr>
+                  <th>Reader</th>
+                  <th>Scope</th>
+                  <th>Target</th>
+                  <th>Granted</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeGrants.map(grant => (
+                  <tr>
+                    <td>
+                      <strong>{grant.userName || grant.userEmail.split('@')[0]}</strong>
+                      <span class="table-sub">{grant.userEmail}</span>
+                    </td>
+                    <td><span class="scope-pill">{grant.scope}</span></td>
+                    <td><code>{grant.target}</code></td>
+                    <td class="table-date">{new Date(grant.grantedAt).toLocaleDateString('en', { month: 'short', day: 'numeric' })}</td>
+                    <td>
+                      <form method="POST" action="/api/access/manage">
+                        <input type="hidden" name="action" value="revoke" />
+                        <input type="hidden" name="grantId" value={grant.id} />
+                        <button type="submit" class="btn-revoke">Revoke</button>
+                      </form>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <!-- ─── 3. DIRECT GRANT (MANUAL INVITE) ─────────────────────────────── -->
+      <section class="admin-section manual-section">
+        <h2 class="section-title">Directly Grant Access</h2>
+        <p class="section-desc">Authorize a friend or reader directly by email without requiring a request.</p>
+
+        <form method="POST" action="/api/access/manage" class="direct-grant-form">
+          <input type="hidden" name="action" value="grant_direct" />
+
+          <div class="form-row">
+            <label>
+              <span>Reader Email</span>
+              <input type="email" name="email" required placeholder="friend@example.com" />
+            </label>
+            <label>
+              <span>Reader Name (optional)</span>
+              <input type="text" name="name" placeholder="e.g. Maya" />
+            </label>
+          </div>
+
+          <div class="form-row">
+            <label>
+              <span>Scope</span>
+              <select name="scope" id="direct-scope-select">
+                <option value="site">Entire Site (*)</option>
+                <option value="world">World</option>
+                <option value="page">Specific Page</option>
+              </select>
+            </label>
+            <label>
+              <span>Target (World slug or Page path)</span>
+              <input type="text" name="target" id="direct-target-input" value="*" required placeholder="* or /world/travel or /entry/slug" />
+            </label>
+          </div>
+
+          <button type="submit" class="btn-primary">Grant Permission</button>
+        </form>
+      </section>
+
+      <!-- ─── 4. MAJOR SECTION VISIBILITY ─────────────────────────────────── -->
+      <section class="admin-section visibility-section">
+        <h2 class="section-title">Major Page Visibility Overrides</h2>
+        <p class="section-desc">Override visibility of the whole site, a world, a page, or an individual entry. The default is private and requestable.</p>
+
+        <form method="POST" action="/api/access/manage" class="direct-grant-form" style="margin-bottom:1.5rem">
+          <input type="hidden" name="action" value="set_visibility" />
+          <div class="form-row"><label><span>Exact path</span><input type="text" name="path" required placeholder="/ (whole site), /world/travel, /entry/slug" /></label><label><span>Visibility</span><select name="visibility"><option value="private">Private (Requestable)</option><option value="absolute_private">Absolute Private</option><option value="public">Public</option></select></label></div>
+          <button type="submit" class="btn-primary">Save policy</button>
+        </form>
+
+        <div class="visibility-items">
+          {[
+            { label: 'Whole Website', path: '/' },
+            { label: 'The Archive', path: '/archive' },
+            { label: 'Timeline', path: '/timeline' },
+            { label: 'Atlas / Places', path: '/places' },
+            { label: 'Rhythm (Habits)', path: '/rhythm' },
+            { label: 'Currently (Now)', path: '/currently' },
+            { label: 'Travel World', path: '/world/travel' },
+            { label: 'Life World', path: '/world/life' },
+            { label: 'Interests World', path: '/world/interests' },
+            { label: 'Making World', path: '/world/making' },
+          ].map(item => {
+            const override = visibilityOverrides.find(o => o.path === item.path);
+            const currentVis = override ? override.visibility : 'private';
+            return (
+              <form method="POST" action="/api/access/manage" class="visibility-row">
+                <input type="hidden" name="action" value="set_visibility" />
+                <input type="hidden" name="path" value={item.path} />
+                <div class="vis-info">
+                  <strong>{item.label}</strong>
+                  <code>{item.path}</code>
+                </div>
+                <div class="vis-controls">
+                  <select name="visibility">
+                    <option value="public" selected={currentVis === 'public'}>Public</option>
+                    <option value="private" selected={currentVis === 'private'}>Private (Requestable)</option>
+                    <option value="absolute_private" selected={currentVis === 'absolute_private'}>Absolute Private</option>
+                  </select>
+                  <button type="submit" class="btn-save-sm">Save</button>
+                </div>
+              </form>
+            );
+          })}
+        </div>
+      </section>
+    </main>
+
+    <footer class="admin-footer">
+      <a href="/" class="admin-back">← Return to Raj's Corner</a>
+      <form method="POST" action="/api/auth/logout" style="display:inline;">
+        <button type="submit" class="admin-logout">Log Out of Admin</button>
+      </form>
+    </footer>
+  </div>
+</Base>
+
+<script>
+  const scopeSelect = document.getElementById('direct-scope-select') as HTMLSelectElement | null;
+  const targetInput = document.getElementById('direct-target-input') as HTMLInputElement | null;
+  if (scopeSelect && targetInput) {
+    scopeSelect.addEventListener('change', () => {
+      if (scopeSelect.value === 'site') targetInput.value = '*';
+      else if (scopeSelect.value === 'world') targetInput.value = 'travel';
+      else targetInput.value = '/entry/';
+    });
+  }
+</script>
+
+<style>
+  .admin-wrapper {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 6rem;
+    font-family: var(--sans, sans-serif);
+  }
+
+  .admin-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+    margin-bottom: 2.5rem;
+    gap: 2rem;
+  }
+
+  .admin-badge {
+    font-family: var(--mono, monospace);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #059669;
+    margin-bottom: 0.5rem;
+    display: block;
+  }
+
+  .admin-title {
+    font-family: var(--serif, "Fraunces", Georgia, serif);
+    font-size: 2.2rem;
+    font-weight: 500;
+    margin: 0 0 0.5rem;
+    color: var(--ink, #1f1e1c);
+  }
+
+  .admin-desc {
+    font-size: 0.95rem;
+    color: var(--text-light, #73716a);
+    margin: 0;
+  }
+
+  .admin-quick-stats {
+    display: flex;
+    gap: 1.5rem;
+  }
+
+  .stat-box {
+    background: var(--paper, #fdfbf7);
+    border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+    border-radius: 6px;
+    padding: 0.75rem 1.25rem;
+    text-align: center;
+    min-width: 90px;
+  }
+
+  .stat-number {
+    display: block;
+    font-family: var(--mono, monospace);
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--ink, #1f1e1c);
+  }
+
+  .stat-label {
+    font-family: var(--mono, monospace);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-light, #73716a);
+  }
+
+  .admin-banner {
+    padding: 0.75rem 1rem;
+    border-radius: 4px;
+    font-size: 0.88rem;
+    margin-bottom: 2rem;
+  }
+
+  .admin-banner.success { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+  .admin-banner.danger { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+  .admin-banner.info { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+
+  .admin-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 3rem;
+  }
+
+  .admin-section {
+    background: var(--paper, #fdfbf7);
+    border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+    border-radius: 6px;
+    padding: 1.75rem 2rem;
+  }
+
+  .section-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .section-title {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 1.35rem;
+    font-weight: 500;
+    margin: 0;
+    color: var(--ink, #1f1e1c);
+  }
+
+  .section-count {
+    padding: 0.15rem 0.5rem;
+    background: rgba(0, 0, 0, 0.06);
+    border-radius: 999px;
+    font-family: var(--mono, monospace);
+    font-size: 0.72rem;
+  }
+
+  .section-desc {
+    font-size: 0.88rem;
+    color: var(--text-light, #73716a);
+    margin: 0 0 1.5rem;
+  }
+
+  .admin-empty {
+    font-style: italic;
+    color: var(--text-light, #888);
+    font-size: 0.9rem;
+    margin: 0;
+  }
+
+  /* ─── Requests ─── */
+  .requests-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .request-card {
+    border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+    background: #ffffff;
+    border-radius: 4px;
+    padding: 1.25rem;
+  }
+
+  .req-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+  }
+
+  .req-name {
+    margin: 0;
+    font-size: 1.05rem;
+    color: var(--ink, #1f1e1c);
+  }
+
+  .req-email {
+    font-size: 0.82rem;
+    color: var(--text-light, #777);
+  }
+
+  .req-date {
+    font-family: var(--mono, monospace);
+    font-size: 0.72rem;
+    color: var(--text-light, #888);
+  }
+
+  .req-target {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.85rem;
+  }
+
+  .req-target-label {
+    font-family: var(--mono, monospace);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    color: var(--text-light, #777);
+  }
+
+  .req-target-path {
+    background: rgba(0, 0, 0, 0.04);
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.82rem;
+  }
+
+  .req-scope-badge {
+    font-family: var(--mono, monospace);
+    font-size: 0.68rem;
+    background: #e0f2fe;
+    color: #0369a1;
+    padding: 0.15rem 0.45rem;
+    border-radius: 3px;
+  }
+
+  .req-note {
+    margin: 0 0 1rem;
+    padding-left: 0.75rem;
+    border-left: 2px solid var(--line, rgba(0, 0, 0, 0.2));
+    font-style: italic;
+    color: var(--text, #444);
+    font-size: 0.9rem;
+  }
+
+  .req-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+  }
+
+  .inline-form {
+    display: inline;
+    margin: 0;
+  }
+
+  .btn-approve {
+    background: #059669;
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    padding: 0.5rem 0.85rem;
+    font-family: var(--mono, monospace);
+    font-size: 0.72rem;
+    cursor: pointer;
+  }
+
+  .btn-approve:hover { background: #047857; }
+
+  .btn-approve-secondary {
+    background: rgba(0, 0, 0, 0.04);
+    color: var(--ink, #1f1e1c);
+    border: 1px solid var(--line, rgba(0, 0, 0, 0.15));
+    border-radius: 3px;
+    padding: 0.5rem 0.85rem;
+    font-family: var(--mono, monospace);
+    font-size: 0.72rem;
+    cursor: pointer;
+  }
+
+  .btn-approve-secondary:hover { background: rgba(0, 0, 0, 0.08); }
+
+  .btn-reject {
+    background: transparent;
+    color: #b91c1c;
+    border: 1px solid #fca5a5;
+    border-radius: 3px;
+    padding: 0.5rem 0.85rem;
+    font-family: var(--mono, monospace);
+    font-size: 0.72rem;
+    cursor: pointer;
+  }
+
+  .btn-reject:hover { background: #fef2f2; }
+
+  /* ─── Grants Table ─── */
+  .grants-table-wrapper {
+    overflow-x: auto;
+  }
+
+  .grants-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+
+  .grants-table th, .grants-table td {
+    padding: 0.75rem 0.5rem;
+    text-align: left;
+    border-bottom: 1px solid var(--line, rgba(0, 0, 0, 0.08));
+  }
+
+  .grants-table th {
+    font-family: var(--mono, monospace);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-light, #888);
+  }
+
+  .table-sub {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-light, #777);
+  }
+
+  .scope-pill {
+    font-family: var(--mono, monospace);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    background: #f3f4f6;
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+  }
+
+  .table-date {
+    font-family: var(--mono, monospace);
+    font-size: 0.75rem;
+    color: var(--text-light, #888);
+  }
+
+  .btn-revoke {
+    background: transparent;
+    border: none;
+    color: #dc2626;
+    font-family: var(--mono, monospace);
+    font-size: 0.72rem;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  /* ─── Direct Grant Form ─── */
+  .direct-grant-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    background: #ffffff;
+    border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+    border-radius: 4px;
+    padding: 1.25rem;
+  }
+
+  .form-row {
+    display: flex;
+    gap: 1rem;
+  }
+
+  .form-row label {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .form-row span {
+    font-family: var(--mono, monospace);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: var(--text, #333);
+  }
+
+  .form-row input, .form-row select {
+    padding: 0.55rem 0.75rem;
+    border: 1px solid var(--line, rgba(0, 0, 0, 0.15));
+    border-radius: 4px;
+    font-size: 0.88rem;
+  }
+
+  .btn-primary {
+    align-self: flex-start;
+    padding: 0.65rem 1.25rem;
+    background: var(--ink, #1f1e1c);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-family: var(--mono, monospace);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+  }
+
+  /* ─── Visibility Overrides ─── */
+  .visibility-items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .visibility-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #ffffff;
+    border: 1px solid var(--line, rgba(0, 0, 0, 0.08));
+    border-radius: 4px;
+    padding: 0.75rem 1rem;
+  }
+
+  .vis-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .vis-info code {
+    font-size: 0.78rem;
+    color: var(--text-light, #777);
+  }
+
+  .vis-controls {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .vis-controls select {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.82rem;
+    border: 1px solid var(--line, rgba(0, 0, 0, 0.15));
+    border-radius: 3px;
+  }
+
+  .btn-save-sm {
+    padding: 0.4rem 0.75rem;
+    background: var(--ink, #1f1e1c);
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    font-family: var(--mono, monospace);
+    font-size: 0.7rem;
+    cursor: pointer;
+  }
+
+  .admin-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  }
+
+  .admin-back {
+    font-family: var(--mono, monospace);
+    font-size: 0.75rem;
+    color: var(--text-light, #777);
+    text-decoration: none;
+  }
+
+  .admin-logout {
+    background: none;
+    border: none;
+    font-family: var(--mono, monospace);
+    font-size: 0.75rem;
+    color: #dc2626;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  @media (max-width: 680px) {
+    .admin-header { flex-direction: column; }
+    .form-row { flex-direction: column; }
+    .visibility-row { flex-direction: column; align-items: flex-start; gap: 0.75rem; }
+  }
+</style>

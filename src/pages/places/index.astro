@@ -1,8 +1,14 @@
 ---
+export const prerender = false;
+
 import Base from '../../layouts/Base.astro';
 import { entries, placeSlug } from '../../lib/universe';
+import { filterVisibleEntries } from '../../lib/access-control/policy';
 
-const all = await entries();
+const session = Astro.locals.session ?? null;
+const rawAll = await entries();
+const all = await filterVisibleEntries(rawAll, session);
+
 const placesData = [...new Set(all.map(x=>x.data.location).filter(Boolean))].map(name => {
   const traces = all.filter(e => e.data.location === name);
   return { name, slug: placeSlug(String(name)), traces, count: traces.length };
@@ -38,5 +44,13 @@ placesData.sort((a, b) => b.count - a.count || String(a.name).localeCompare(Stri
         ))}
       </div>
     </section>
+
+    <aside class="universe-continuation">
+      <div class="continuation-actions">
+        <a href="/timeline/" class="cont-action">Explore time →</a>
+        <a href="/archive/" class="cont-action">Wander the Archive →</a>
+        <a href="/random/" class="cont-action">Surprise Me →</a>
+      </div>
+    </aside>
   </article>
 </Base>

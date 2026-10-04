@@ -1,7 +1,9 @@
 ---
-import { niceDate } from '../lib/universe';
 import type { CollectionEntry } from 'astro:content';
+import { evaluateAccess } from '../lib/access-control/policy';
+import { entryWorld } from '../lib/universe';
 interface Props { entries: CollectionEntry<'entries'>[]; heading?: string }
 const { entries, heading = 'Found in the archive' } = Astro.props as Props;
+const session = Astro.locals.session ?? null;
 ---
-<section class="entry-section"><p class="label">{heading}</p><div class="entry-list">{entries.map((entry) => <a href={`/entry/${entry.id}/`} class="entry-row"><span>{entry.data.type}</span><h3>{entry.data.title}</h3><small>{entry.data.location ?? niceDate(entry.data.date)}</small><b>↗</b></a>)}</div></section>
+<section class="entry-section"><p class="label">{heading}</p><div class="entry-list">{await Promise.all(entries.map(async (entry) => { const access = await evaluateAccess({ path: `/entry/${entry.id}`, world: entryWorld(entry), visibility: entry.data.visibility, allowRequests: entry.data.allowRequests }, session); return <a href={`/entry/${entry.id}/`} class="entry-row"><span>{access.allowed ? 'open' : access.visibility === 'absolute_private' ? 'owner only' : 'private'}</span><h3>{entry.data.title}</h3><small>{access.allowed ? entry.data.type : 'Locked · sign in to request access'}</small><b>↗</b></a>; }))}</div></section>

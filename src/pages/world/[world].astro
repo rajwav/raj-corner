@@ -1,15 +1,40 @@
 ---
+export const prerender = false;
+
 import Base from '../../layouts/Base.astro';
 import EntryList from '../../components/EntryList.astro';
+import AccessGate from '../../components/AccessGate.astro';
 import { entries, worlds, entryWorld, niceDate, placeSlug } from '../../lib/universe';
-
-export async function getStaticPaths() {
-  return worlds.filter(([slug]) => !['archive','me'].includes(slug)).map(([world]) => ({ params:{world} }));
-}
+import { evaluateAccess, filterVisibleEntries, PUBLIC_WORLD_SLUGS } from '../../lib/access-control/policy';
 
 const { world } = Astro.params;
-const definition = worlds.find(([slug])=>slug===world)!;
-const found = (await entries()).filter(entry => entryWorld(entry) === world);
+const definition = worlds.find(([slug])=>slug===world);
+if (!definition) {
+  return new Response(null, { status: 404, statusText: 'Not Found' });
+}
+
+const session = Astro.locals.session ?? null;
+const pageAccess = await evaluateAccess({ path: `/world/${world}`, world }, session);
+
+if (!pageAccess.allowed) {
+  Astro.response.status = pageAccess.reason === 'unauthenticated' ? 401 : 403;
+}
+
+const allEntries = await entries();
+const rawFound = allEntries.filter(entry => entryWorld(entry) === world);
+
+// For public world landing pages, show ALL entries in the listing so visitors
+// can discover what exists. Each entry is evaluated individually — private ones
+// show a discovery card (title + lock) rather than full content.
+// For non-public worlds, only show what the session is authorized to see.
+const isPublicWorld = PUBLIC_WORLD_SLUGS.has(world ?? '');
+const visibleEntries = pageAccess.allowed ? await filterVisibleEntries(rawFound, session) : [];
+const visibleEntryIds = new Set(visibleEntries.map(e => e.id));
+
+// `found` = entries shown in the listing; `visibleEntryIds` tells the template
+// which ones can render full content vs a locked discovery card.
+const found = isPublicWorld && pageAccess.allowed ? rawFound : visibleEntries;
+
 
 // Sort for Travel and Life
 const sortedEntries = found.slice().sort((a, b) => {
@@ -32,8 +57,16 @@ const mkOther = found.filter(e => !mkCurrent.includes(e) && !mkExperiments.inclu
 const musicEntries = found.filter(e => e.data.type === 'music').sort((a, b) => Number(b.data.date ?? 0) - Number(a.data.date ?? 0));
 const otherInterests = found.filter(e => e.data.type !== 'music');
 ---
-<Base title={`${definition[1]} · Raj's Corner`}>
-  {world === 'travel' ? (
+<Base title={pageAccess.allowed ? `${definition[1]} · Raj's Corner` : `${definition[1]} (Protected) · Raj's Corner`}>
+  {!pageAccess.allowed ? (
+    <AccessGate
+      evaluation={pageAccess}
+      resourcePath={`/world/${world}`}
+      worldSlug={world}
+      resourceTitle={definition[1]}
+      session={session}
+    />
+  ) : world === 'travel' ? (
     <article class="travel-world-container">
       <header class="travel-header">
         <span class="travel-label">A wing in the archive</span>
@@ -43,33 +76,50 @@ const otherInterests = found.filter(e => e.data.type !== 'music');
       </header>
       
       <section class="travel-journeys">
-        {sortedEntries.map((entry, idx) => (
-          <article class={`travel-journey ${entry.data.cover ? 'has-cover' : ''} ${idx === 0 ? 'featured' : ''}`}>
-            {entry.data.cover && (
-              <a href={`/entry/${entry.id}/`} class="journey-cover-link">
-                <figure class="journey-cover">
-                  <img src={entry.data.cover} alt={entry.data.title} loading="lazy" />
-                </figure>
-              </a>
-            )}
-            <div class="journey-content">
-              <div class="journey-meta">
-                {entry.data.date && <span class="j-date">{niceDate(entry.data.date)}</span>}
-                {entry.data.location && (
-                  <a href={`/places/${placeSlug(entry.data.location)}/`} class="j-location">
-                    {entry.data.location}
-                  </a>
-                )}
-                <span class="j-type">{entry.data.type}</span>
+        {sortedEntries.map((entry, idx) => {
+          const isAccessible = visibleEntryIds.has(entry.id);
+          const isAbsPrivate = entry.data.visibility === 'absolute_private';
+          if (!isAccessible) {
+            return (
+              <article class={`travel-journey locked-entry ${idx === 0 ? 'featured' : ''}`}>
+                <a href={`/entry/${entry.id}/`} class="locked-entry-link" aria-label={`Private entry: ${entry.data.title}`}>
+                  <div class="locked-entry-inner">
+                    <span class="locked-icon" aria-hidden="true">🔒</span>
+                    <span class="locked-title">{entry.data.title}</span>
+                    <span class="locked-badge">{isAbsPrivate ? 'Owner only' : 'Private'}</span>
+                  </div>
+                </a>
+              </article>
+            );
+          }
+          return (
+            <article class={`travel-journey ${entry.data.cover ? 'has-cover' : ''} ${idx === 0 ? 'featured' : ''}`}>
+              {entry.data.cover && (
+                <a href={`/entry/${entry.id}/`} class="journey-cover-link">
+                  <figure class="journey-cover">
+                    <img src={entry.data.cover} alt={entry.data.title} loading="lazy" />
+                  </figure>
+                </a>
+              )}
+              <div class="journey-content">
+                <div class="journey-meta">
+                  {entry.data.date && <span class="j-date">{niceDate(entry.data.date)}</span>}
+                  {entry.data.location && (
+                    <a href={`/places/${placeSlug(entry.data.location)}/`} class="j-location">
+                      {entry.data.location}
+                    </a>
+                  )}
+                  <span class="j-type">{entry.data.type}</span>
+                </div>
+                <a href={`/entry/${entry.id}/`} class="journey-title-link">
+                  <h2 class="journey-title">{entry.data.title}</h2>
+                </a>
+                {entry.data.description && <p class="journey-desc">{entry.data.description}</p>}
+                <a href={`/entry/${entry.id}/`} class="journey-arrow">Read field notes →</a>
               </div>
-              <a href={`/entry/${entry.id}/`} class="journey-title-link">
-                <h2 class="journey-title">{entry.data.title}</h2>
-              </a>
-              {entry.data.description && <p class="journey-desc">{entry.data.description}</p>}
-              <a href={`/entry/${entry.id}/`} class="journey-arrow">Read field notes →</a>
-            </div>
-          </article>
-        ))}
+            </article>
+          );
+        })}
       </section>
       
       <footer class="travel-footer">
@@ -96,6 +146,23 @@ const otherInterests = found.filter(e => e.data.type !== 'music');
             <h2 class="life-era-marker">{year}</h2>
             <div class="life-fragments">
               {items?.map(entry => {
+                const isAccessible = visibleEntryIds.has(entry.id);
+                const isAbsPrivate = entry.data.visibility === 'absolute_private';
+
+                if (!isAccessible) {
+                  return (
+                    <article class="life-fragment frag-locked">
+                      <a href={`/entry/${entry.id}/`} class="locked-entry-link" aria-label={`Private entry: ${entry.data.title}`}>
+                        <div class="locked-entry-inner">
+                          <span class="locked-icon" aria-hidden="true">🔒</span>
+                          <span class="locked-title">{entry.data.title}</span>
+                          <span class="locked-badge">{isAbsPrivate ? 'Owner only' : 'Private'}</span>
+                        </div>
+                      </a>
+                    </article>
+                  );
+                }
+
                 const isPhoto = entry.data.type === 'photo';
                 const isMilestone = entry.data.type === 'milestone';
                 const isPerson = entry.data.type === 'person';
@@ -194,7 +261,23 @@ const otherInterests = found.filter(e => e.data.type !== 'music');
           <div class="music-records-shelf">
             {musicEntries.map((entry, index) => {
               const numStr = String(index + 1).padStart(2, '0');
-              const artistName = entry.data.artist || '';
+              const isAccessible = visibleEntryIds.has(entry.id);
+              const isAbsPrivate = entry.data.visibility === 'absolute_private';
+              if (!isAccessible) {
+                return (
+                  <a href={`/entry/${entry.id}/`} class="record-row-item locked-entry-link" aria-label={`Private: ${entry.data.title}`}>
+                    <span class="record-index">{numStr}</span>
+                    <div class="record-thumb-frame">
+                      <div class="record-thumb-vinyl" aria-hidden="true"><div class="record-vinyl-groove"></div></div>
+                    </div>
+                    <div class="record-main-info">
+                      <span class="record-title">{entry.data.title}</span>
+                      <span class="locked-badge">{isAbsPrivate ? 'Owner only' : '🔒 Private'}</span>
+                    </div>
+                  </a>
+                );
+              }
+              const artistName = (entry.data as any).artist || '';
               return (
                 <a href={`/entry/${entry.id}/`} class="record-row-item">
                   <span class="record-index">{numStr}</span>
@@ -225,6 +308,21 @@ const otherInterests = found.filter(e => e.data.type !== 'music');
       {otherInterests.length > 0 && (
         <section class="interests-gallery">
           {otherInterests.map(entry => {
+            const isAccessible = visibleEntryIds.has(entry.id);
+            const isAbsPrivate = entry.data.visibility === 'absolute_private';
+            if (!isAccessible) {
+              return (
+                <a href={`/entry/${entry.id}/`} class="interest-item int-locked locked-entry-link" aria-label={`Private: ${entry.data.title}`}>
+                  <div class="interest-content">
+                    <div class="locked-entry-inner">
+                      <span class="locked-icon" aria-hidden="true">🔒</span>
+                      <span class="locked-title">{entry.data.title}</span>
+                      <span class="locked-badge">{isAbsPrivate ? 'Owner only' : 'Private'}</span>
+                    </div>
+                  </div>
+                </a>
+              );
+            }
             const t = entry.data.type;
             let typeClass = 'int-default';
             if (t === 'car') typeClass = 'int-car';
@@ -281,84 +379,128 @@ const otherInterests = found.filter(e => e.data.type !== 'music');
           <section class="making-group making-current">
             <h2 class="mg-label">On the workbench</h2>
             <div class="mg-list-large">
-              {mkCurrent.map(entry => (
-                <article class="mk-item mk-large">
-                  <div class="mk-meta">
-                    <span class="mk-status">{(entry.data as any).status || entry.data.type}</span>
-                    {entry.data.date && <span class="mk-date">{niceDate(entry.data.date)}</span>}
-                  </div>
-                  <a href={`/entry/${entry.id}/`} class="mk-title-link">
-                    <h3 class="mk-title">{entry.data.title}</h3>
-                  </a>
-                  {entry.data.description && <p class="mk-desc">{entry.data.description}</p>}
-                  {entry.data.cover && (
-                    <a href={`/entry/${entry.id}/`} class="mk-image-link">
-                      <figure class="mk-artifact">
-                        <img src={entry.data.cover} alt={entry.data.title} loading="lazy" />
-                      </figure>
+              {mkCurrent.map(entry => {
+                const isAccessible = visibleEntryIds.has(entry.id);
+                const isAbsPrivate = entry.data.visibility === 'absolute_private';
+                if (!isAccessible) return (
+                  <article class="mk-item mk-large locked-entry">
+                    <a href={`/entry/${entry.id}/`} class="locked-entry-link">
+                      <div class="locked-entry-inner"><span class="locked-icon" aria-hidden="true">🔒</span><span class="locked-title">{entry.data.title}</span><span class="locked-badge">{isAbsPrivate ? 'Owner only' : 'Private'}</span></div>
                     </a>
-                  )}
-                  <a href={`/entry/${entry.id}/`} class="mk-arrow">Open project →</a>
-                </article>
-              ))}
+                  </article>
+                );
+                return (
+                  <article class="mk-item mk-large">
+                    <div class="mk-meta">
+                      <span class="mk-status">{(entry.data as any).status || entry.data.type}</span>
+                      {entry.data.date && <span class="mk-date">{niceDate(entry.data.date)}</span>}
+                    </div>
+                    <a href={`/entry/${entry.id}/`} class="mk-title-link">
+                      <h3 class="mk-title">{entry.data.title}</h3>
+                    </a>
+                    {entry.data.description && <p class="mk-desc">{entry.data.description}</p>}
+                    {entry.data.cover && (
+                      <a href={`/entry/${entry.id}/`} class="mk-image-link">
+                        <figure class="mk-artifact">
+                          <img src={entry.data.cover} alt={entry.data.title} loading="lazy" />
+                        </figure>
+                      </a>
+                    )}
+                    <a href={`/entry/${entry.id}/`} class="mk-arrow">Open project →</a>
+                  </article>
+                );
+              })}
             </div>
           </section>
         )}
 
         {mkExperiments.length > 0 && (
           <section class="making-group making-experiments">
-            <h2 class="mg-label">Experiments & Tests</h2>
+            <h2 class="mg-label">Experiments &amp; Tests</h2>
             <div class="mg-grid">
-              {mkExperiments.map(entry => (
-                <article class="mk-item mk-experiment">
-                  <div class="mk-meta">
-                    <span class="mk-status">{(entry.data as any).status || 'experiment'}</span>
-                  </div>
-                  <a href={`/entry/${entry.id}/`} class="mk-title-link">
-                    <h3 class="mk-title">{entry.data.title}</h3>
-                  </a>
-                  {entry.data.description && <p class="mk-desc">{entry.data.description}</p>}
-                  <a href={`/entry/${entry.id}/`} class="mk-arrow">View details →</a>
-                </article>
-              ))}
+              {mkExperiments.map(entry => {
+                const isAccessible = visibleEntryIds.has(entry.id);
+                const isAbsPrivate = entry.data.visibility === 'absolute_private';
+                if (!isAccessible) return (
+                  <article class="mk-item mk-experiment locked-entry">
+                    <a href={`/entry/${entry.id}/`} class="locked-entry-link">
+                      <div class="locked-entry-inner"><span class="locked-icon" aria-hidden="true">🔒</span><span class="locked-title">{entry.data.title}</span><span class="locked-badge">{isAbsPrivate ? 'Owner only' : 'Private'}</span></div>
+                    </a>
+                  </article>
+                );
+                return (
+                  <article class="mk-item mk-experiment">
+                    <div class="mk-meta">
+                      <span class="mk-status">{(entry.data as any).status || 'experiment'}</span>
+                    </div>
+                    <a href={`/entry/${entry.id}/`} class="mk-title-link">
+                      <h3 class="mk-title">{entry.data.title}</h3>
+                    </a>
+                    {entry.data.description && <p class="mk-desc">{entry.data.description}</p>}
+                    <a href={`/entry/${entry.id}/`} class="mk-arrow">View details →</a>
+                  </article>
+                );
+              })}
             </div>
           </section>
         )}
 
         {mkIdeas.length > 0 && (
           <section class="making-group making-ideas">
-            <h2 class="mg-label">Sketches & Ideas</h2>
+            <h2 class="mg-label">Sketches &amp; Ideas</h2>
             <div class="mg-list-small">
-              {mkIdeas.map(entry => (
-                <article class="mk-item mk-idea">
-                  <a href={`/entry/${entry.id}/`} class="mk-title-link">
-                    <h3 class="mk-title">{entry.data.title}</h3>
-                  </a>
-                  <div class="mk-meta">
-                    <span class="mk-type">{entry.data.type}</span>
-                    {(entry.data as any).status && <span class="mk-status">{(entry.data as any).status}</span>}
-                  </div>
-                </article>
-              ))}
+              {mkIdeas.map(entry => {
+                const isAccessible = visibleEntryIds.has(entry.id);
+                const isAbsPrivate = entry.data.visibility === 'absolute_private';
+                if (!isAccessible) return (
+                  <article class="mk-item mk-idea locked-entry">
+                    <a href={`/entry/${entry.id}/`} class="locked-entry-link">
+                      <div class="locked-entry-inner"><span class="locked-icon" aria-hidden="true">🔒</span><span class="locked-title">{entry.data.title}</span><span class="locked-badge">{isAbsPrivate ? 'Owner only' : 'Private'}</span></div>
+                    </a>
+                  </article>
+                );
+                return (
+                  <article class="mk-item mk-idea">
+                    <a href={`/entry/${entry.id}/`} class="mk-title-link">
+                      <h3 class="mk-title">{entry.data.title}</h3>
+                    </a>
+                    <div class="mk-meta">
+                      <span class="mk-type">{entry.data.type}</span>
+                      {(entry.data as any).status && <span class="mk-status">{(entry.data as any).status}</span>}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </section>
         )}
 
         {mkOther.length > 0 && (
           <section class="making-group making-archive">
-            <h2 class="mg-label">Past & Finished</h2>
+            <h2 class="mg-label">Past &amp; Finished</h2>
             <div class="mg-grid">
-              {mkOther.map(entry => (
-                <article class="mk-item mk-past">
-                  <div class="mk-meta">
-                    <span class="mk-status">{(entry.data as any).status || entry.data.type}</span>
-                  </div>
-                  <a href={`/entry/${entry.id}/`} class="mk-title-link">
-                    <h3 class="mk-title">{entry.data.title}</h3>
-                  </a>
-                  {entry.data.description && <p class="mk-desc">{entry.data.description}</p>}
-                </article>
-              ))}
+              {mkOther.map(entry => {
+                const isAccessible = visibleEntryIds.has(entry.id);
+                const isAbsPrivate = entry.data.visibility === 'absolute_private';
+                if (!isAccessible) return (
+                  <article class="mk-item mk-past locked-entry">
+                    <a href={`/entry/${entry.id}/`} class="locked-entry-link">
+                      <div class="locked-entry-inner"><span class="locked-icon" aria-hidden="true">🔒</span><span class="locked-title">{entry.data.title}</span><span class="locked-badge">{isAbsPrivate ? 'Owner only' : 'Private'}</span></div>
+                    </a>
+                  </article>
+                );
+                return (
+                  <article class="mk-item mk-past">
+                    <div class="mk-meta">
+                      <span class="mk-status">{(entry.data as any).status || entry.data.type}</span>
+                    </div>
+                    <a href={`/entry/${entry.id}/`} class="mk-title-link">
+                      <h3 class="mk-title">{entry.data.title}</h3>
+                    </a>
+                    {entry.data.description && <p class="mk-desc">{entry.data.description}</p>}
+                  </article>
+                );
+              })}
             </div>
           </section>
         )}
@@ -397,3 +539,53 @@ const otherInterests = found.filter(e => e.data.type !== 'music');
     </>
   )}
 </Base>
+<style>
+  /* ── Locked discovery card — used across all world layouts ─────────────── */
+  .locked-entry {
+    opacity: 0.72;
+  }
+
+  .locked-entry-link {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .locked-entry-inner {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.75rem 1rem;
+    border: 1px dashed var(--line, rgba(0,0,0,0.18));
+    border-radius: 4px;
+    background: rgba(0,0,0,0.02);
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .locked-entry-link:hover .locked-entry-inner {
+    background: rgba(0,0,0,0.05);
+    border-color: var(--ink, #1f1e1c);
+  }
+
+  .locked-icon {
+    font-size: 0.9rem;
+    flex-shrink: 0;
+  }
+
+  .locked-title {
+    font-family: var(--serif, Georgia, serif);
+    font-size: 0.92rem;
+    color: var(--ink, #1f1e1c);
+    flex: 1;
+  }
+
+  .locked-badge {
+    font-family: var(--mono, monospace);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-light, #8a8880);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+</style>

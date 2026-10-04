@@ -1,9 +1,15 @@
 ---
+export const prerender = false;
+
 import Base from '../layouts/Base.astro';
 import EntryList from '../components/EntryList.astro';
 import { entries, worlds } from '../lib/universe';
-const all = await entries();
-const recent = all.slice(0, 4);
+
+const session = Astro.locals.session ?? null;
+const rawAll = await entries();
+// Discovery is deliberately limited to title-level metadata. EntryList decides
+// whether a visitor can open each item and never emits private fields.
+const recent = rawAll.slice(0, 4);
 
 // Filter primary worlds for the museum wings
 const primaryWorlds = worlds.filter(([slug]) => !['archive', 'me'].includes(slug));

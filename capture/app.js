@@ -224,6 +224,10 @@ function initializeNewEntry(type = 'memory'){
   form.elements.date.value=today();
   form.elements.cover.value='';
   if(form.elements.presentation)form.elements.presentation.value='{}';
+  if(form.elements.visibility)form.elements.visibility.value='public';
+  if(form.elements.allowRequests)form.elements.allowRequests.checked=true;
+  const canvasVisInit = document.getElementById('canvas-visibility-select');
+  if(canvasVisInit) canvasVisInit.value='public';
   storyBlocks = [];
   if (window.BlockNotePOCModule && typeof window.BlockNotePOCModule.unmountBlockNotePOC === 'function') {
     window.BlockNotePOCModule.unmountBlockNotePOC('blocknote-container');
@@ -283,6 +287,23 @@ function setupForm(type,data={}){ if (typeof previewBtn !== 'undefined' && previ
   
   $('#tag-options').innerHTML=[...new Set(entries.flatMap(e=>e.tags||[]))].sort().map(tag=>`<label><input type="checkbox" name="tags" value="${esc(tag)}" ${(data.tags||[]).includes(tag)?'checked':''}>${esc(tag)}</label>`).join('')||'<small>No tags yet—add one below.</small>';
   $('#related-options').innerHTML=entries.filter(e=>e.id!==data.id).map(e=>`<label><input type="checkbox" name="related" value="${esc(e.id)}" ${(data.related||[]).includes(e.id)?'checked':''}>${esc(e.title)}</label>`).join('')||'<small>No other entries yet.</small>';
+
+  if (form && form.elements.visibility) {
+    form.elements.visibility.value = data.visibility || 'public';
+    const allowReqRow = document.getElementById('allow-requests-row');
+    if (form.elements.visibility.value === 'absolute_private') {
+      if (allowReqRow) allowReqRow.style.opacity = '0.5';
+    } else {
+      if (allowReqRow) allowReqRow.style.opacity = '1';
+    }
+  }
+  if (form && form.elements.allowRequests) {
+    form.elements.allowRequests.checked = data.allowRequests !== false;
+  }
+  const canvasVisEl = document.getElementById('canvas-visibility-select');
+  if (canvasVisEl) {
+    canvasVisEl.value = data.visibility || 'public';
+  }
 }
 
 async function upload(){const file=$('#image').files[0];if(!file)return;$('#image-status').textContent='Saving image locally…';const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file)});const result=await request('/api/image',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:file.name,dataUrl})});$('#entry-form').elements.cover.value=result.url;$('#image-status').textContent=`Attached: ${file.name}`; if(typeof previewPane!=='undefined' && !previewPane.hidden) updatePreview();
@@ -900,7 +921,9 @@ async function collectCurrentEntryState() {
     presentation,
     story: blocknoteMd,
     status: form.elements.status ? form.elements.status.value : 'past',
-    featured: Boolean(form.elements.featured && form.elements.featured.checked)
+    featured: Boolean(form.elements.featured && form.elements.featured.checked),
+    visibility: form.elements.visibility ? form.elements.visibility.value : 'public',
+    allowRequests: form.elements.allowRequests ? Boolean(form.elements.allowRequests.checked) : true
   };
 }
 
@@ -1037,8 +1060,47 @@ layoutSelect.onchange = () => {
   if (Object.keys(p.layout).length === 0) delete p.layout;
   presEl.value = JSON.stringify(p);
   updatePreview();
-  
 };
+
+const setupVisibilityEl = document.getElementById('setup-visibility');
+const canvasVisibilityEl = document.getElementById('canvas-visibility-select');
+const allowRequestsEl = document.getElementById('setup-allow-requests');
+
+if (setupVisibilityEl) {
+  setupVisibilityEl.addEventListener('change', () => {
+    const val = setupVisibilityEl.value;
+    const allowReqRow = document.getElementById('allow-requests-row');
+    if (val === 'absolute_private') {
+      if (allowReqRow) allowReqRow.style.opacity = '0.5';
+    } else {
+      if (allowReqRow) allowReqRow.style.opacity = '1';
+    }
+    if (canvasVisibilityEl) canvasVisibilityEl.value = val;
+    if (typeof window.setDirty === 'function') window.setDirty(true);
+  });
+}
+
+if (canvasVisibilityEl) {
+  canvasVisibilityEl.addEventListener('change', () => {
+    const val = canvasVisibilityEl.value;
+    if (setupVisibilityEl) {
+      setupVisibilityEl.value = val;
+      const allowReqRow = document.getElementById('allow-requests-row');
+      if (val === 'absolute_private') {
+        if (allowReqRow) allowReqRow.style.opacity = '0.5';
+      } else {
+        if (allowReqRow) allowReqRow.style.opacity = '1';
+      }
+    }
+    if (typeof window.setDirty === 'function') window.setDirty(true);
+  });
+}
+
+if (allowRequestsEl) {
+  allowRequestsEl.addEventListener('change', () => {
+    if (typeof window.setDirty === 'function') window.setDirty(true);
+  });
+}
 
 function simpleMarkdown(text) {
   if (!text) return '';

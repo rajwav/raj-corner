@@ -1,8 +1,13 @@
 ---
+export const prerender = false;
+
 import Base from '../../layouts/Base.astro';
 import { entries, placeSlug } from '../../lib/universe';
+import { filterVisibleEntries } from '../../lib/access-control/policy';
 
-const all = await entries();
+const session = Astro.locals.session ?? null;
+const rawAll = await entries();
+const all = await filterVisibleEntries(rawAll, session);
 const groups = Object.groupBy(all, x => x.data.date?.getFullYear() ?? 'Someday');
 const sortedYears = Object.entries(groups).sort(([a],[b])=>b.localeCompare(a));
 
