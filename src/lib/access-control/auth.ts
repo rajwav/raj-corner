@@ -3,7 +3,7 @@ import type { UserSession, UserRole } from './types';
 
 export const SESSION_COOKIE_NAME = 'raj_session';
 
-function getServerEnv(name: string): string | undefined {
+export function getServerEnv(name: string): string | undefined {
   // Astro loads .env values into import.meta.env for server modules. The
   // process fallback keeps direct Node-based checks working, but cannot
   // override a value Astro loaded from the project's .env file.

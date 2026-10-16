@@ -5,7 +5,8 @@ import {
   buildSessionCookieString, 
   getOwnerEmail,
   getOAuthRedirectUri,
-  buildOAuthStateClearCookieString
+  buildOAuthStateClearCookieString,
+  getServerEnv
 } from '../../../../lib/access-control/auth';
 
 export const prerender = false;
@@ -74,8 +75,8 @@ export const GET: APIRoute = async ({ request, redirect, url }) => {
     }
   } catch {}
 
-  const clientId = import.meta.env.GOOGLE_CLIENT_ID;
-  const clientSecret = import.meta.env.GOOGLE_CLIENT_SECRET;
+  const clientId = getServerEnv('GOOGLE_CLIENT_ID');
+  const clientSecret = getServerEnv('GOOGLE_CLIENT_SECRET');
   if (!clientId || !clientSecret) {
     return new Response(JSON.stringify({ error: 'Google OAuth credentials not configured on server' }), {
       status: 500,

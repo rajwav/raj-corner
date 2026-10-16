@@ -1,0 +1,55 @@
+{
+  "requests": [
+    {
+      "id": "req_712b1a85272d0364",
+      "userId": "u_aa00d8e0b7",
+      "userEmail": "i.am.raj04ever@gmail.com",
+      "userName": "RAJ PANDA",
+      "resourcePath": "/world/life",
+      "worldSlug": "life",
+      "requestedScope": "page",
+      "status": "approved",
+      "createdAt": "2026-10-03T09:35:11.814Z",
+      "updatedAt": "2026-10-03T09:56:12.325Z",
+      "reviewedBy": "ppdpitambar574@gmail.com",
+      "reviewedAt": "2026-10-03T09:56:12.324Z"
+    },
+    {
+      "id": "req_f037cab5a036b47d",
+      "userId": "u_aa00d8e0b7",
+      "userEmail": "i.am.raj04ever@gmail.com",
+      "userName": "RAJ PANDA",
+      "resourcePath": "/entry/the-day-we-faced-the-needle",
+      "worldSlug": "life",
+      "requestedScope": "page",
+      "status": "approved",
+      "createdAt": "2026-10-03T09:36:19.777Z",
+      "updatedAt": "2026-10-03T09:56:10.277Z",
+      "reviewedBy": "ppdpitambar574@gmail.com",
+      "reviewedAt": "2026-10-03T09:56:10.269Z"
+    }
+  ],
+  "grants": [
+    {
+      "id": "g_d66eb86b2437bb04",
+      "userEmail": "i.am.raj04ever@gmail.com",
+      "userName": "RAJ PANDA",
+      "scope": "page",
+      "target": "/entry/the-day-we-faced-the-needle",
+      "grantedBy": "ppdpitambar574@gmail.com",
+      "grantedAt": "2026-10-03T09:56:10.269Z",
+      "status": "active"
+    },
+    {
+      "id": "g_2c83c59f55b4659a",
+      "userEmail": "i.am.raj04ever@gmail.com",
+      "userName": "RAJ PANDA",
+      "scope": "page",
+      "target": "/world/life",
+      "grantedBy": "ppdpitambar574@gmail.com",
+      "grantedAt": "2026-10-03T09:56:12.324Z",
+      "status": "active"
+    }
+  ],
+  "visibilityOverrides": []
+}

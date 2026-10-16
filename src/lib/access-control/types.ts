@@ -38,7 +38,11 @@ export interface AccessGrant {
   grantedAt: string;
   status: 'active' | 'revoked';
   revokedAt?: string;
+  revokedBy?: string;
+  updatedAt?: string;
+  restoredAt?: string;
 }
+
 
 export interface AccessEvaluation {
   allowed: boolean;

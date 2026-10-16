@@ -4,49 +4,112 @@ type: memory
 world: life
 date: 2026-10-16
 location: "VSSUT Burla"
-tags: ["college", "friends", "midsem"]
+mood: []
+tags: ["college","friends","midsem"]
 description: "The final day of midsem exams brought an exhausting study stretch to an end, leaving behind a missed meeting, an awkward misunderstanding, and a short conversation while buying bananas."
 related: ["banamudra-sahoo"]
 people: ["Banamudra Sahoo"]
-status: past
+status: draft
 featured: false
 accent: sand
 ---
 
-October 16 was the final day of our midsem exams.
+The Last Midsem and the Conversation We Didn't Have
 
-The lead-up to it had been exhausting. For roughly the last three exams, Banamudra and I had been studying together, scrambling to cover entire syllabuses in ridiculously narrow windows of time. You would finish preparing for one subject, and the very next day another paper was waiting. There were no comfortable gaps, no breathing room—just the frantic rush of trying to get through the material and give it our best shot. Somehow, we had managed to pull through those last few papers.
+*October 16, 2026*
 
-With that final exam out of the way, an approximate ten-day holiday stretched out before our next academic stretch began.
+Today was the last day of our midsem exams.
 
-I wanted to talk to Banamudra about what we might do during those days off. I had hoped we would sit down, talk things through, and maybe head to Burla together. But she had other things to attend to, and I had a train to catch later on, so sitting down for a proper conversation wasn't falling into place.
+For the last few exams, especially the last three, Banamudra and I had been studying together. We would somehow cover the entire syllabus in a single day, then do it all over again for the next exam, sometimes with barely any gap between them. And somehow, despite the lengthy questions and all the last-minute preparation, we were managing to do surprisingly well.
 
-Then a small misunderstanding crept in, and things turned awkward.
+Today, the exams were finally over.
 
-I started second-guessing myself. I wondered whether I had been asking to meet up too often—whether I was becoming irritating by continually suggesting that we meet or go to Burla. Perhaps she didn't actually want to, and had only been saying yes out of politeness. I genuinely didn't know.
+Now we had approximately ten days of holidays ahead of us. I wanted to talk to Banamudra about what we were going to do during the break. Maybe we could go to Burla together, spend some time, and enjoy the fact that exams were finally over.
 
-The thought made me feel bad. If I had been bothering her, I wanted to apologise, but I couldn't figure out how to put what I felt into words. I drafted messages on my phone and deleted them, over and over, struggling to find the right phrasing.
+But she had some other work, and I had a train to catch. We couldn't really meet.
 
-At one point, my phone rang. Banamudra called to say she was on a bus and that I could join and come to Burla if I wanted to.
+Then a small misunderstanding made everything awkward.
 
-The catch was that the bus was leaving in about thirty seconds.
+I started wondering whether I had been asking too much. Maybe I kept asking her to meet or suggesting that we go to Burla together so often that it had become irritating. Maybe she didn't actually want to meet me but was agreeing out of formality.
 
-There was simply no practical way I could reach it in time. Part of me wondered whether the offer had been genuine or merely a courtesy extended because she knew I couldn't make it. I had no way of knowing what she truly intended, but in that head-space of uncertainty, I leaned toward the pessimistic interpretation.
+I didn't know.
 
-A little later, while riding toward Burla in an auto, I finally hit send on a message.
+And because I didn't know, I started feeling bad.
 
-Sometime after that, I stopped by the road to buy bananas. And right there, in the middle of that completely ordinary errand, I looked up and saw Banamudra and Ansika walking toward me from the opposite direction. They had just finished their shopping.
+At one point, I thought, *Okay, nahi milna toh theek hai.*
 
-We stopped and talked for a little while.
+If she didn't want to meet, that was fine. I didn't want to force anyone to spend time with me. But at the same time, I couldn't stop wondering whether I had somehow made things uncomfortable between us.
 
-During the conversation, I brought up how something similar had happened after the previous semester's exams, when we hadn't met afterwards either. She explained that Ansika's paper hadn't gone well back then, she was feeling low, and so she had accompanied them back to the hostel.
+She even called me and said she was on a bus and that, if I wanted to go to Burla, I could come.
 
-She also mentioned that she considered me a good friend.
+But the bus was leaving in about thirty seconds.
 
-That brief exchange left me with plenty to turn over in my head.
+Thirty seconds.
 
-I had spent the better part of the day spiralling into questions—wondering whether I was asking for too much, whether I was being a nuisance, whether she wanted to spend time around me at all. But I couldn't read her mind, and I couldn't assume I understood everything she was dealing with. All I really knew was that I valued the friendship, and the last thing I wanted was for my enthusiasm or repeated invitations to make her feel pressured or uncomfortable.
+There was practically no way I could get there in time. And even though she had called and said that, my mind was still questioning everything. She knew the bus was leaving. So was she genuinely inviting me, or was it just a formality because I had kept talking about going together?
 
-I had hoped the day would end on a lighter, happier note—planning out the upcoming break and celebrating the fact that exams were finally behind us. Instead, it ended with a missed plan, an awkward silence, a message I had agonised over sending, and an unexpected conversation on the street while buying fruit.
+I had no answer.
 
-It wasn't a dramatic end to midsems. It was just an awkward, unresolved, and very human one.
+I wanted to tell her that I was sorry if I had been irritating her. I wanted to clear up the misunderstanding before the holidays began.
+
+I wrote messages.
+
+Then deleted them.
+
+Wrote something else.
+
+Deleted that too.
+
+I kept thinking about what to say and how to say it without making the situation even more awkward.
+
+Eventually, after leaving for Burla, I was sitting in an auto when I finally sent her a message.
+
+And then, a little later, something unexpected happened.
+
+I was buying bananas.
+
+Yes, bananas. Standing there, buying bananas like a monkey, when I suddenly saw Banamudra and Ansika coming from the opposite direction. They had apparently finished their shopping and were heading back.
+
+We talked for a minute.
+
+During that conversation, I mentioned that something similar had happened last semester too. After the exams, we hadn't met.
+
+Banamudra explained that Ansika's exam had gone badly that time, her mood was low, and she had gone back to the hostel with them.
+
+And then she said something that stayed with me.
+
+**She considered me a good friend.**
+
+Maybe that should have been enough to calm all the questions in my head. I value our friendship, and the last thing I want is to make someone uncomfortable by repeatedly asking to meet or spend time together.
+
+I never wanted my invitations to feel like pressure.
+
+I just wanted to talk about the holidays, maybe plan something together, and end the exams on a happy note. After studying together through those last few exhausting papers, it felt natural to want to spend a little time together once everything was over.
+
+But somehow, a simple plan turned into a misunderstanding, a lot of overthinking, and several messages that I wrote and deleted.
+
+I still don't know exactly what she was thinking that day. Maybe I misunderstood the situation. Maybe we simply couldn't coordinate our plans. Maybe both of us had things going on that the other didn't fully understand.
+
+I don't want to pretend I know the answer.
+
+What I do know is that we eventually spoke, even if only for a minute, while I was buying bananas on my way to Burla.
+
+And somewhere in that brief conversation, amid all the awkwardness I had been carrying around, she reminded me that she considered me a good friend.
+
+I think that's what I'll remember most about October 16.
+
+The last midsem. The ten-day holiday ahead. The conversation I had wanted to have but couldn't quite manage. All those unsent messages. And then, unexpectedly, a minute of conversation while buying bananas.
+
+**I had wanted the day to end with plans for the holidays. Instead, it ended with a little uncertainty, a little relief, and a reminder that friendship matters to me enough that I sometimes worry too much about getting it wrong.**
+
+And honestly, when I think about it now, maybe it's better that things didn't go smoothly.
+
+If everything had gone according to plan, maybe we would've just met, taken a simple photo after the exams, and gone our separate ways. Nothing wrong with that, but it probably wouldn't have become a memory I'd keep thinking about.
+
+Instead, I spent time overthinking, writing and deleting messages, wondering whether I was bothering her. And then, completely randomly, there I was on the road, looking like a monkey buying bananas, when I bumped into her and Ansika. 😂🍌
+
+And in that unexpected little moment, she told me she considered me a good friend.
+
+Somehow, that feels more special than a perfectly planned meeting or a simple post-exam photo. It was messy, unplanned, a little awkward, and very much like life itself.
+
+**Maybe not every good memory needs a perfect plan. Sometimes, you just need a confused mind, a random encounter, a bunch of bananas, and a few words that make the whole day worth remembering.** ❤️

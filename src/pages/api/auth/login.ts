@@ -3,7 +3,8 @@ import {
   verifyOwnerPassword, 
   createOwnerSession, 
   buildSessionCookieString,
-  getOwnerEmail 
+  getOwnerEmail,
+  getOwnerSecret 
 } from '../../../lib/access-control/auth';
 
 export const prerender = false;
@@ -44,7 +45,21 @@ export const POST: APIRoute = async ({ request, redirect }) => {
   // Handle Owner Login
   const ownerEmail = getOwnerEmail();
   if (!ownerEmail) {
+    if (!contentType.includes('application/json')) {
+      return redirect(`/login?error=owner_not_configured&redirect=${encodeURIComponent(redirectUrl)}`);
+    }
     return new Response(JSON.stringify({ error: 'Owner access is not configured on this server.' }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const ownerSecret = getOwnerSecret();
+  if (!ownerSecret) {
+    if (!contentType.includes('application/json')) {
+      return redirect(`/login?error=passphrase_not_configured&redirect=${encodeURIComponent(redirectUrl)}`);
+    }
+    return new Response(JSON.stringify({ error: 'Owner passphrase login is not configured on this server.' }), {
       status: 503,
       headers: { 'Content-Type': 'application/json' },
     });

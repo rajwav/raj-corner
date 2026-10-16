@@ -6,6 +6,31 @@ import crypto from 'node:crypto';
 
 export const prerender = false;
 
+export const GET: APIRoute = async ({ request }) => {
+  const session = getSessionFromCookies(request.headers.get('cookie'));
+  if (!isOwnerSession(session)) {
+    return new Response(JSON.stringify({ error: 'Owner authorization required.' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const url = new URL(request.url);
+  if (url.searchParams.get('export') === 'json') {
+    const storage = getStorage();
+    const data = await storage.exportData();
+    return new Response(JSON.stringify(data, null, 2), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Disposition': 'attachment; filename="raj-corner-access-backup.json"',
+      },
+    });
+  }
+
+  return new Response(JSON.stringify({ error: 'Invalid GET request' }), { status: 400 });
+};
+
 export const POST: APIRoute = async ({ request, redirect }) => {
   const session = getSessionFromCookies(request.headers.get('cookie'));
   if (!isOwnerSession(session)) {
@@ -47,7 +72,7 @@ export const POST: APIRoute = async ({ request, redirect }) => {
     // Determine target based on scope
     let target = req.resourcePath;
     if (approvedScope === 'world') {
-      target = req.worldSlug || 'travel';
+      target = req.worldSlug || 'life';
     } else if (approvedScope === 'site') {
       target = '*';
     }
@@ -105,10 +130,10 @@ export const POST: APIRoute = async ({ request, redirect }) => {
     return redirect('/admin/access?rejected=' + encodeURIComponent(req.userEmail));
   }
 
-  // 3. REVOKE
+  // 3. REVOKE (MANUAL ONLY)
   if (action === 'revoke') {
     const grantId = String(body.grantId || '');
-    const success = await storage.revokeGrant(grantId);
+    const success = await storage.revokeGrant(grantId, session?.email || 'owner');
     if (!success) {
       return new Response(JSON.stringify({ error: 'Grant not found.' }), {
         status: 404,
@@ -125,11 +150,67 @@ export const POST: APIRoute = async ({ request, redirect }) => {
     return redirect('/admin/access?revoked=true');
   }
 
-  // 4. DIRECT GRANT (Raj manually grants access to any email)
+  // 4. RESTORE (MANUAL REACTIVATION OF REVOKED GRANT)
+  if (action === 'restore') {
+    const grantId = String(body.grantId || '');
+    const success = await storage.restoreGrant(grantId);
+    if (!success) {
+      return new Response(JSON.stringify({ error: 'Grant not found.' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (contentType.includes('application/json')) {
+      return new Response(JSON.stringify({ ok: true, grantId }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return redirect('/admin/access?restored=true');
+  }
+
+  // 5. EDIT GRANT (MODIFY EXISTING PERMISSION SCOPE OR TARGET)
+  if (action === 'edit_grant') {
+    const grantId = String(body.grantId || '');
+    const newScope = (body.scope as AccessScope) || 'page';
+    let newTarget = String(body.target || '').trim();
+    if (newScope === 'site') newTarget = '*';
+
+    if (!['page', 'world', 'site'].includes(newScope)) {
+      return new Response(JSON.stringify({ error: 'Invalid grant scope.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (!newTarget) {
+      return new Response(JSON.stringify({ error: 'Target is required.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    const updated = await storage.updateGrant(grantId, {
+      scope: newScope,
+      target: newTarget,
+    });
+
+    if (!updated) {
+      return new Response(JSON.stringify({ error: 'Grant not found.' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (contentType.includes('application/json')) {
+      return new Response(JSON.stringify({ ok: true, grant: updated }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return redirect('/admin/access?updated=true');
+  }
+
+  // 6. DIRECT GRANT (Raj manually grants access to any email)
   if (action === 'grant_direct') {
     const email = String(body.email || '').toLowerCase().trim();
     const scope = (body.scope as AccessScope) || 'page';
-    const target = String(body.target || '*').trim();
+    let target = String(body.target || '*').trim();
+    if (scope === 'site') target = '*';
 
     if (!email) {
       return new Response(JSON.stringify({ error: 'Email is required.' }), {
@@ -160,7 +241,7 @@ export const POST: APIRoute = async ({ request, redirect }) => {
     return redirect('/admin/access?granted=' + encodeURIComponent(email));
   }
 
-  // 5. SET VISIBILITY OVERRIDE
+  // 7. SET VISIBILITY OVERRIDE
   if (action === 'set_visibility') {
     const targetPath = String(body.path || '').trim();
     const visibility = (body.visibility as Visibility) || 'private';

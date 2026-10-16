@@ -10,3 +10,5 @@ reference/
 .data/
 .vercel
 .env*
+!.env.example
+

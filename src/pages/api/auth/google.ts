@@ -3,13 +3,14 @@ import {
   getOAuthRedirectUri, 
   buildOAuthStateCookieString, 
   isTemporaryVercelHostname, 
-  CANONICAL_SITE_URL 
+  CANONICAL_SITE_URL,
+  getServerEnv
 } from '../../../lib/access-control/auth';
 
 export const prerender = false;
 
 export const GET: APIRoute = async ({ request, redirect, url }) => {
-  const clientId = import.meta.env.GOOGLE_CLIENT_ID;
+  const clientId = getServerEnv('GOOGLE_CLIENT_ID');
   const redirectTarget = url.searchParams.get('redirect') || '/';
 
   // Support local test mock mode if configured in automated tests
