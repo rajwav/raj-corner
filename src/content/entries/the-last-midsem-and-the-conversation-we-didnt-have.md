@@ -9,7 +9,7 @@ tags: ["college","friends","midsem"]
 description: "The final day of midsem exams brought an exhausting study stretch to an end, leaving behind a missed meeting, an awkward misunderstanding, and a short conversation while buying bananas."
 related: ["banamudra-sahoo"]
 people: ["Banamudra Sahoo"]
-status: draft
+status: past
 featured: false
 accent: sand
 ---

@@ -7,8 +7,7 @@ reference/
 .trash/
 .env
 .env.*
-.data/
-.vercel
-.env*
 !.env.example
-
+.data/
+.agents/
+skills-lock.json

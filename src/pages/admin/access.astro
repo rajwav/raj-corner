@@ -172,16 +172,25 @@ const isServerlessWithoutDurable = !isDurable && (Boolean(process.env.VERCEL) ||
                 )}
 
                 <div class="req-actions">
-                  <!-- Approve Page -->
+                  <!-- 1-Click Whole Site Approval (Primary) -->
                   <form method="POST" action="/api/access/manage" class="inline-form">
                     <input type="hidden" name="action" value="approve" />
                     <input type="hidden" name="requestId" value={req.id} />
-                    <input type="hidden" name="scope" value="page" />
-                    <button type="submit" class="btn-approve">Approve (This Page)</button>
+                    <input type="hidden" name="scope" value="site" />
+                    <button type="submit" class="btn-approve">✓ Approve Whole-Site Access</button>
                   </form>
 
-                  <!-- Approve World -->
-                  {req.worldSlug && (
+                  <!-- Secondary Scoped Approvals -->
+                  {req.requestedScope !== 'site' && (
+                    <form method="POST" action="/api/access/manage" class="inline-form">
+                      <input type="hidden" name="action" value="approve" />
+                      <input type="hidden" name="requestId" value={req.id} />
+                      <input type="hidden" name="scope" value="page" />
+                      <button type="submit" class="btn-approve-secondary">Approve Page Only</button>
+                    </form>
+                  )}
+
+                  {req.worldSlug && req.requestedScope !== 'site' && (
                     <form method="POST" action="/api/access/manage" class="inline-form">
                       <input type="hidden" name="action" value="approve" />
                       <input type="hidden" name="requestId" value={req.id} />
@@ -190,19 +199,11 @@ const isServerlessWithoutDurable = !isDurable && (Boolean(process.env.VERCEL) ||
                     </form>
                   )}
 
-                  <!-- Approve Site -->
-                  <form method="POST" action="/api/access/manage" class="inline-form">
-                    <input type="hidden" name="action" value="approve" />
-                    <input type="hidden" name="requestId" value={req.id} />
-                    <input type="hidden" name="scope" value="site" />
-                    <button type="submit" class="btn-approve-secondary">Approve Entire Site</button>
-                  </form>
-
-                  <!-- Reject -->
+                  <!-- Deny -->
                   <form method="POST" action="/api/access/manage" class="inline-form">
                     <input type="hidden" name="action" value="reject" />
                     <input type="hidden" name="requestId" value={req.id} />
-                    <button type="submit" class="btn-reject">Reject</button>
+                    <button type="submit" class="btn-reject">Deny</button>
                   </form>
                 </div>
               </article>
@@ -366,14 +367,14 @@ const isServerlessWithoutDurable = !isDurable && (Boolean(process.env.VERCEL) ||
             <label>
               <span>Scope</span>
               <select name="scope" id="direct-scope-select">
+                <option value="site" selected>Whole Site Reader (*)</option>
                 <option value="page">Specific Page (/entry/...)</option>
                 <option value="world">World Collection</option>
-                <option value="site">Entire Site (*)</option>
               </select>
             </label>
             <label>
               <span>Target Resource</span>
-              <input type="text" name="target" id="direct-target-input" value="/entry/" required placeholder="/entry/slug or world name or *" />
+              <input type="text" name="target" id="direct-target-input" value="*" required placeholder="* for whole site, or /entry/slug" />
             </label>
           </div>
 

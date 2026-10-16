@@ -208,7 +208,7 @@ export const POST: APIRoute = async ({ request, redirect }) => {
   // 6. DIRECT GRANT (Raj manually grants access to any email)
   if (action === 'grant_direct') {
     const email = String(body.email || '').toLowerCase().trim();
-    const scope = (body.scope as AccessScope) || 'page';
+    const scope = (body.scope as AccessScope) || 'site';
     let target = String(body.target || '*').trim();
     if (scope === 'site') target = '*';
 

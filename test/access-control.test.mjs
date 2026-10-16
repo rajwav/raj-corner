@@ -1413,8 +1413,104 @@ async function runTests() {
   }
   console.log('   ✓ Durability contract strictly enforces true durability without false claims.\n');
 
-  console.log('🎉 ALL 69 SECURITY, PERIMETER, PERSISTENCE & CONCURRENCY TESTS PASSED PERFECTLY!\n');
-  console.log('   (59 baseline security & OAuth tests + 10 persistence, concurrency, multi-user, manual revocation, restore & cold start tests)\n');
+  // ─── Test 66: Whole-site reader request & 1-click approval ─────────────
+  console.log('66. Whole-site reader request and 1-click approval workflow...');
+  const readerEmail = 'trusted-friend@example.com';
+  const friendSession = createVisitorSession(readerEmail, 'Trusted Friend');
+
+  // Visitor makes site request
+  await testStorage.saveRequest({
+    id: 'req_test_whole_site',
+    userId: friendSession.userId,
+    userEmail: friendSession.email,
+    userName: friendSession.name,
+    resourcePath: '/entry/the-treat-before-the-last-exam',
+    requestedScope: 'site',
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+
+  // Verify pending status applies to any private page
+  const evalPending1 = await evaluateAccess({ path: '/entry/the-treat-before-the-last-exam', world: 'life', visibility: 'private' }, friendSession);
+  const evalPending2 = await evaluateAccess({ path: '/entry/future-secret-story', world: 'travel', visibility: 'private' }, friendSession);
+  assert.strictEqual(evalPending1.allowed, false);
+  assert.strictEqual(evalPending1.reason, 'pending');
+  assert.strictEqual(evalPending2.allowed, false);
+  assert.strictEqual(evalPending2.reason, 'pending');
+
+  // Owner 1-click approves whole site
+  await testStorage.saveGrant({
+    id: 'g_test_whole_site',
+    userEmail: friendSession.email,
+    userName: friendSession.name,
+    scope: 'site',
+    target: '*',
+    grantedBy: 'ppdpitambar574@gmail.com',
+    grantedAt: new Date().toISOString(),
+    status: 'active',
+  });
+  await testStorage.updateRequest('req_test_whole_site', { status: 'approved' });
+
+  // Now friend can access all private stories, existing and future
+  const evalApproved1 = await evaluateAccess({ path: '/entry/the-treat-before-the-last-exam', world: 'life', visibility: 'private' }, friendSession);
+  const evalApproved2 = await evaluateAccess({ path: '/entry/future-secret-story', world: 'travel', visibility: 'private' }, friendSession);
+  const evalApproved3 = await evaluateAccess({ path: '/world/life', world: 'life', visibility: 'private' }, friendSession);
+  assert.strictEqual(evalApproved1.allowed, true, 'Approved whole-site reader must access existing private story');
+  assert.strictEqual(evalApproved1.reason, 'granted_site');
+  assert.strictEqual(evalApproved2.allowed, true, 'Approved whole-site reader must access future private story');
+  assert.strictEqual(evalApproved2.reason, 'granted_site');
+  assert.strictEqual(evalApproved3.allowed, true, 'Approved whole-site reader must access private worlds');
+  console.log('   ✓ Whole-site reader approval grants seamless access across all private entries.\n');
+
+  // ─── Test 67: Direct email grant gives immediate whole-site access ─────
+  console.log('67. Direct email grant grants immediate whole-site access without request...');
+  const directEmail = 'direct-reader@example.com';
+  const directSession = createVisitorSession(directEmail, 'Direct Reader');
+
+  // Before grant: unauthorized
+  const evalBefore = await evaluateAccess({ path: '/entry/the-treat-before-the-last-exam', world: 'life', visibility: 'private' }, directSession);
+  assert.strictEqual(evalBefore.allowed, false);
+
+  // Owner directly grants whole-site access
+  await testStorage.saveGrant({
+    id: 'g_test_direct_site',
+    userEmail: directSession.email,
+    userName: directSession.name,
+    scope: 'site',
+    target: '*',
+    grantedBy: 'ppdpitambar574@gmail.com',
+    grantedAt: new Date().toISOString(),
+    status: 'active',
+  });
+
+  const evalAfter = await evaluateAccess({ path: '/entry/the-treat-before-the-last-exam', world: 'life', visibility: 'private' }, directSession);
+  assert.strictEqual(evalAfter.allowed, true);
+  assert.strictEqual(evalAfter.reason, 'granted_site');
+  console.log('   ✓ Direct grant immediately authorizes reader for whole site.\n');
+
+  // ─── Test 68: Absolute private entries remain strictly owner-only ──────
+  console.log('68. Absolute-private entries remain strictly owner-only even with site grant...');
+  const evalAbs = await evaluateAccess({
+    path: '/entry/top-secret-confidential',
+    world: 'life',
+    visibility: 'absolute_private',
+  }, friendSession);
+  assert.strictEqual(evalAbs.allowed, false, 'Absolute private must NOT allow approved site reader');
+  assert.strictEqual(evalAbs.reason, 'unauthorized_cannot_request');
+  assert.strictEqual(evalAbs.allowRequests, false);
+
+  const testOwnerSession = await createOwnerSession();
+  const evalOwnerAbs = await evaluateAccess({
+    path: '/entry/top-secret-confidential',
+    world: 'life',
+    visibility: 'absolute_private',
+  }, testOwnerSession);
+  assert.strictEqual(evalOwnerAbs.allowed, true, 'Owner must access absolute private entry');
+  console.log('   ✓ Absolute-private entries remain strictly owner-only.\n');
+
+  console.log('🎉 ALL 72 SECURITY, PERIMETER, PERSISTENCE & CONCURRENCY TESTS PASSED PERFECTLY!\n');
+  console.log('   (59 baseline security & OAuth tests + 13 persistence, concurrency, multi-user, whole-site, manual revocation, restore & cold start tests)\n');
 }
 
 

@@ -20,7 +20,7 @@ export const POST: APIRoute = async ({ request, redirect }) => {
   const contentType = request.headers.get('content-type') || '';
   let resourcePath = '';
   let worldSlug = '';
-  let scope: AccessScope = 'page';
+  let scope: AccessScope = 'site';
   let note = '';
   let redirectUrl = '/';
 
@@ -28,14 +28,14 @@ export const POST: APIRoute = async ({ request, redirect }) => {
     const json = await request.json();
     resourcePath = json.resourcePath || '';
     worldSlug = json.worldSlug || '';
-    scope = (json.scope as AccessScope) || 'page';
+    scope = (json.scope as AccessScope) || 'site';
     note = json.note || '';
     redirectUrl = json.redirect || resourcePath || '/';
   } else {
     const formData = await request.formData();
     resourcePath = String(formData.get('resourcePath') || '');
     worldSlug = String(formData.get('worldSlug') || '');
-    scope = (formData.get('scope') as AccessScope) || 'page';
+    scope = (formData.get('scope') as AccessScope) || 'site';
     note = String(formData.get('note') || '');
     redirectUrl = String(formData.get('redirect') || resourcePath || '/');
   }
