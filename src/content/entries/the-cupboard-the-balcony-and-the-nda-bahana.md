@@ -31,6 +31,18 @@ Panic instantly set in. For reasons that made complete sense in that split secon
 
 Somehow—defying every law of geometry and human anatomy—both of us crammed ourselves inside that tiny cupboard. Shakti locked the door from the outside to make the room look totally innocent.
 
+:::stack fit=contain
+
+![Inside the cupboard](/uploads/1792169601000-cupboard-hiding-raj-and-aditya.jpg "Crammed inside the cupboard")
+
+![Shakti and the room](/uploads/1792169602000-cupboard-room-selfie-with-shakti.jpg "Shakti in the room while we hid in the cupboard")
+
+![The wardrobe](/uploads/1792169603000-cupboard-wardrobe-room-view.jpg "The wardrobe in the room")
+
+![Defying geometry](/uploads/1792169604000-cupboard-two-inside-laughing.jpg "Defying every law of geometry")
+
+:::
+
 Seconds later, the owner walked in.
 
 We were folded in half inside the dark cupboard, barely daring to breathe. Every single rustle felt like a siren. We could hear the owner walking around the room, talking to Shakti. One minute passed. Then two. Then three. The air was running out, our knees were jammed into our chests, and our limbs were cramping up.
